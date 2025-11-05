@@ -1,95 +1,138 @@
 /**
- * @NApiVersion 2.1
+ * @NApiVersion 2.x
  * @NModuleScope SameAccount
- *
- * Utilitaire création/MAJ dans la queue WMS
+ * @NModuleType Library
  */
-define(['N/record','N/search','N/log'], (record, search, log) => {
+define(['N/record', 'N/log'], function (record, log) {
 
-  const QUEUE_RT   = 'customrecord_cde_item_sync_queue';
-  const F_TOPIC    = 'custrecord_sync_topic';
-  const F_REC_TYPE = 'custrecord_sync_record_type';
-  const F_REC_ID   = 'custrecord_sync_record_id';
-  const F_STATUS   = 'custrecord_sync_status';
-  const F_DATE     = 'custrecord_sync_item_date_sync';
-  const F_ITEM     = 'custrecord_sync_item';
+    var QUEUE_RECORD_TYPE = 'customrecord_cde_item_sync_queue';
 
-  const ITEM_TYPES = new Set([
-    'inventoryitem','assemblyitem','noninventoryitem','serviceitem','otherchargeitem',
-    'kititem','downloaditem','lotnumberedinventoryitem','serializedinventoryitem'
-  ]);
+    var FIELDS = {
+        RECORD_TYPE: 'custrecord_sync_record_type',
+        DATE_SYNC:   'custrecord_sync_item_date_sync',
+        STATUS:      'custrecord_sync_status',
+        FILE:        'custrecord_sync_file',
+        RECORD_ID:   'custrecord_sync_record_id',
+        TOPIC:       'custrecord_sync_topic',
+        ITEM:        'custrecord_sync_item'
+    };
 
-  function findExisting({ topic, recordType, recordId }) {
-    const res = search.create({
-      type: QUEUE_RT,
-      filters: [
-        [F_TOPIC, 'is', String(topic)], 'AND',
-        [F_REC_TYPE, 'is', String(recordType)], 'AND',
-        [F_REC_ID, 'is', String(recordId)]
-      ],
-      columns: ['internalid']
-    }).run().getRange({ start: 0, end: 1 });
-    return (res && res.length) ? res[0].getValue('internalid') : null;
-  }
+    /**
+     * ⚠️ STATUS = internal IDs de ta liste "CDE Status Sync WMS".
+     * Mets ici les bonnes valeurs (exemple : 1 = PENDING, 2 = IN_PROGRESS, etc.).
+     */
+    var STATUS = {
+        PENDING:     '1',
+        IN_PROGRESS: '2',
+        DONE:        '3',
+        ERROR:       '4'
+    };
 
-  function enqueue({ topic, recordType, recordId, statusId = null }) {
-    try {
-      const existingId = findExisting({ topic, recordType, recordId });
-      if (existingId) {
-        log.debug('Queue', `déjà présent (topic=${topic}, rec=${recordType}#${recordId})`);
-        return existingId;
-      }
+    /**
+     * ⚠️ TOPIC = internal IDs de ta liste "CDE Sync Type".
+     * Mets ici la valeur qui correspond au type "ITEM".
+     */
+    var TOPIC = {
+        ITEM: '1' // <-- à adapter à l'ID réel de la valeur "ITEM" dans CDE Sync Type
+    };
 
-      const r = record.create({ type: QUEUE_RT, isDynamic: false });
+    /**
+     * Ajoute une ligne dans la file de synchronisation.
+     *
+     * @param {Object} options
+     * @param {string} options.topic        → internalid de la valeur de liste (ex: TOPIC.ITEM)
+     * @param {string} options.recordType   → type NetSuite (ex: 'inventoryitem')
+     * @param {number|string} options.recordId → internalid NetSuite du record
+     * @param {number|string} [options.itemId] → internalid de l’article (si applicable)
+     * @returns {number} internalid du record de queue
+     */
+    function enqueue(options) {
+        try {
+            if (!options || !options.topic || !options.recordId) {
+                throw new Error('enqueue: topic et recordId sont obligatoires');
+            }
 
-      // Topic : texte ou ID
-      if (/^\d+$/.test(String(topic))) {
-        r.setValue({ fieldId: F_TOPIC, value: Number(topic) });
-      } else {
-        r.setText({ fieldId: F_TOPIC, text: String(topic) });
-      }
+            var topic      = options.topic;
+            var recordType = options.recordType || '';
+            var recordId   = options.recordId;
+            var itemId     = options.itemId || null;
 
-      r.setValue({ fieldId: F_REC_TYPE, value: String(recordType) });
-      r.setValue({ fieldId: F_REC_ID,   value: String(recordId) });
-      r.setValue({ fieldId: F_DATE,     value: new Date() });
+            log.debug('CDE_WMS_QueueUtil.enqueue - start', {
+                topic: topic,
+                recordType: recordType,
+                recordId: recordId,
+                itemId: itemId
+            });
 
-      if (statusId !== null && statusId !== undefined && statusId !== '') {
-        // accepte texte ("Ready") ou ID
-        if (/^\d+$/.test(String(statusId))) {
-          r.setValue({ fieldId: F_STATUS, value: Number(statusId) });
-        } else {
-          r.setText({ fieldId: F_STATUS, text: String(statusId) });
+            var queueRec = record.create({
+                type: QUEUE_RECORD_TYPE,
+                isDynamic: true
+            });
+
+            queueRec.setValue({
+                fieldId: FIELDS.TOPIC,
+                value: topic
+            });
+
+            if (recordType) {
+                queueRec.setValue({
+                    fieldId: FIELDS.RECORD_TYPE,
+                    value: recordType
+                });
+            }
+
+            // Texte → on stocke l’ID NetSuite
+            queueRec.setValue({
+                fieldId: FIELDS.RECORD_ID,
+                value: String(recordId)
+            });
+
+            if (itemId) {
+                queueRec.setValue({
+                    fieldId: FIELDS.ITEM,
+                    value: itemId
+                });
+            }
+
+            // date du jour
+            queueRec.setValue({
+                fieldId: FIELDS.DATE_SYNC,
+                value: new Date()
+            });
+
+            // statut initial = PENDING
+            queueRec.setValue({
+                fieldId: FIELDS.STATUS,
+                value: STATUS.PENDING
+            });
+
+            var queueId = queueRec.save({
+                enableSourcing: false,
+                ignoreMandatoryFields: true
+            });
+
+            log.audit('CDE_WMS_QueueUtil.enqueue - queued', {
+                queueId: queueId,
+                topic: topic,
+                recordId: recordId,
+                itemId: itemId
+            });
+
+            return queueId;
+
+        } catch (e) {
+            log.error('CDE_WMS_QueueUtil.enqueue - ERROR', {
+                message: e.message,
+                stack: e.stack
+            });
+            throw e;
         }
-      }
-
-      if (ITEM_TYPES.has(String(recordType))) {
-        r.setValue({ fieldId: F_ITEM, value: Number(recordId) });
-      }
-
-      const queueId = r.save({ ignoreMandatoryFields: true });
-      log.audit('Queue', `créé → queueId=${queueId} (${recordType}#${recordId})`);
-      return queueId;
-
-    } catch (e) {
-      log.error('Queue error', e);
     }
-  }
 
-  function updateStatus(queueId, statusIdOrText) {
-    try {
-      if (!queueId || statusIdOrText === null || statusIdOrText === undefined || statusIdOrText === '') return;
-      const r = record.load({ type: QUEUE_RT, id: Number(queueId), isDynamic: false });
-      if (/^\d+$/.test(String(statusIdOrText))) {
-        r.setValue({ fieldId: F_STATUS, value: Number(statusIdOrText) });
-      } else {
-        r.setText({ fieldId: F_STATUS, text: String(statusIdOrText) });
-      }
-      r.save({ ignoreMandatoryFields: true });
-      log.debug('Queue', `statut mis à jour → queueId=${queueId}, status=${statusIdOrText}`);
-    } catch (e) {
-      log.error('Queue updateStatus error', e);
-    }
-  }
-
-  return { enqueue, updateStatus, findExisting };
+    return {
+        enqueue: enqueue,
+        STATUS: STATUS,
+        TOPIC: TOPIC,
+        FIELDS: FIELDS
+    };
 });
