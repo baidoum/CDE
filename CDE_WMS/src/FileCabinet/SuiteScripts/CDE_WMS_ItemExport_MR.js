@@ -19,7 +19,7 @@ define([
     return search.create({
       type: 'customrecord_cde_item_sync_queue',
       filters: [
-        ['custrecord_sync_status', 'is', QueueUtil.STATUS.PENDING],
+        ['custrecord_sync_status', 'is', QueueUtil.STATUS.READY],
         'AND',
         ['custrecord_sync_topic', 'is', QueueUtil.TOPIC.ITEM]
       ],
