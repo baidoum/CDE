@@ -1,138 +1,200 @@
 /**
- * @NApiVersion 2.x
+ * @NApiVersion 2.1
  * @NModuleScope SameAccount
- * @NModuleType Library
  */
-define(['N/record', 'N/log'], function (record, log) {
+define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
 
-    var QUEUE_RECORD_TYPE = 'customrecord_cde_item_sync_queue';
+  const QUEUE_RECORD_TYPE = 'customrecord_cde_item_sync_queue';
 
-    var FIELDS = {
-        RECORD_TYPE: 'custrecord_sync_record_type',
-        DATE_SYNC:   'custrecord_sync_item_date_sync',
-        STATUS:      'custrecord_sync_status',
-        FILE:        'custrecord_sync_file',
-        RECORD_ID:   'custrecord_sync_record_id',
-        TOPIC:       'custrecord_sync_topic',
-        ITEM:        'custrecord_sync_item'
-    };
+  const FIELDS = {
+    RECORD_TYPE: 'custrecord_sync_record_type',
+    DATE_SYNC:   'custrecord_sync_item_date_sync',
+    STATUS:      'custrecord_sync_status',
+    FILE:        'custrecord_sync_file',
+    RECORD_ID:   'custrecord_sync_record_id',
+    TOPIC:       'custrecord_sync_topic',
+    ITEM:        'custrecord_sync_item'
+  };
 
-    /**
-     * ⚠️ STATUS = internal IDs de ta liste "CDE Status Sync WMS".
-     * Mets ici les bonnes valeurs (exemple : 1 = PENDING, 2 = IN_PROGRESS, etc.).
-     */
-    var STATUS = {
-        PENDING:     '1',
-        IN_PROGRESS: '2',
-        DONE:        '3',
-        ERROR:       '4'
-    };
+  /**
+   * ⚠️ À ADAPTER : mapping "label" → internalid de la liste CDE Status Sync WMS.
+   * Exemple ci-dessous, remplace '1','2','3','4','5' par tes vrais IDs.
+   */
+  const STATUS_MAP = {
+    Pending:    '1',
+    Ready:      '2',
+    InProgress: '3',
+    Done:       '4',
+    Error:      '5'
+  };
 
-    /**
-     * ⚠️ TOPIC = internal IDs de ta liste "CDE Sync Type".
-     * Mets ici la valeur qui correspond au type "ITEM".
-     */
-    var TOPIC = {
-        ITEM: '1' // <-- à adapter à l'ID réel de la valeur "ITEM" dans CDE Sync Type
-    };
+  /**
+   * ⚠️ À ADAPTER : mapping "label" → internalid de la liste CDE Sync Type.
+   * Exemple: valeur "ITEM" dans ta liste = internalid 1 → '1'.
+   */
+  const TOPIC_MAP = {
+    ITEM: '1'
+  };
 
-    /**
-     * Ajoute une ligne dans la file de synchronisation.
-     *
-     * @param {Object} options
-     * @param {string} options.topic        → internalid de la valeur de liste (ex: TOPIC.ITEM)
-     * @param {string} options.recordType   → type NetSuite (ex: 'inventoryitem')
-     * @param {number|string} options.recordId → internalid NetSuite du record
-     * @param {number|string} [options.itemId] → internalid de l’article (si applicable)
-     * @returns {number} internalid du record de queue
-     */
-    function enqueue(options) {
-        try {
-            if (!options || !options.topic || !options.recordId) {
-                throw new Error('enqueue: topic et recordId sont obligatoires');
-            }
+  const STATUS = {
+    PENDING:     STATUS_MAP.Pending,
+    READY:       STATUS_MAP.Ready,
+    IN_PROGRESS: STATUS_MAP.InProgress,
+    DONE:        STATUS_MAP.Done,
+    ERROR:       STATUS_MAP.Error
+  };
 
-            var topic      = options.topic;
-            var recordType = options.recordType || '';
-            var recordId   = options.recordId;
-            var itemId     = options.itemId || null;
+  const TOPIC = {
+    ITEM: TOPIC_MAP.ITEM
+  };
 
-            log.debug('CDE_WMS_QueueUtil.enqueue - start', {
-                topic: topic,
-                recordType: recordType,
-                recordId: recordId,
-                itemId: itemId
-            });
+  function mapStatusLabel(statusId) {
+    // tu passes 'Ready', 'Pending' depuis le UE → on traduit en internalid
+    return STATUS_MAP[statusId] || statusId;
+  }
 
-            var queueRec = record.create({
-                type: QUEUE_RECORD_TYPE,
-                isDynamic: true
-            });
+  function mapTopicLabel(topic) {
+    // tu passes 'ITEM' depuis le UE → on traduit en internalid
+    return TOPIC_MAP[topic] || topic;
+  }
 
-            queueRec.setValue({
-                fieldId: FIELDS.TOPIC,
-                value: topic
-            });
-
-            if (recordType) {
-                queueRec.setValue({
-                    fieldId: FIELDS.RECORD_TYPE,
-                    value: recordType
-                });
-            }
-
-            // Texte → on stocke l’ID NetSuite
-            queueRec.setValue({
-                fieldId: FIELDS.RECORD_ID,
-                value: String(recordId)
-            });
-
-            if (itemId) {
-                queueRec.setValue({
-                    fieldId: FIELDS.ITEM,
-                    value: itemId
-                });
-            }
-
-            // date du jour
-            queueRec.setValue({
-                fieldId: FIELDS.DATE_SYNC,
-                value: new Date()
-            });
-
-            // statut initial = PENDING
-            queueRec.setValue({
-                fieldId: FIELDS.STATUS,
-                value: STATUS.PENDING
-            });
-
-            var queueId = queueRec.save({
-                enableSourcing: false,
-                ignoreMandatoryFields: true
-            });
-
-            log.audit('CDE_WMS_QueueUtil.enqueue - queued', {
-                queueId: queueId,
-                topic: topic,
-                recordId: recordId,
-                itemId: itemId
-            });
-
-            return queueId;
-
-        } catch (e) {
-            log.error('CDE_WMS_QueueUtil.enqueue - ERROR', {
-                message: e.message,
-                stack: e.stack
-            });
-            throw e;
-        }
+  /**
+   * Enqueue appelé par ton UE
+   *
+   * options = {
+   *   topic: 'ITEM' ou internalid direct,
+   *   recordType: rec.type,
+   *   recordId: rec.id,
+   *   statusId: 'Ready' / 'Pending' (label de la liste)
+   * }
+   */
+  function enqueue(options) {
+    if (!options || !options.topic || !options.recordId) {
+      throw new Error('enqueue: topic et recordId sont obligatoires');
     }
 
-    return {
-        enqueue: enqueue,
-        STATUS: STATUS,
-        TOPIC: TOPIC,
-        FIELDS: FIELDS
-    };
+    const topicValue  = mapTopicLabel(options.topic);
+    const statusValue = options.statusId ? mapStatusLabel(options.statusId) : STATUS.PENDING;
+    const recordType  = options.recordType || '';
+    const recordId    = String(options.recordId);
+
+    log.debug('Queue.enqueue - start', {
+      topic: options.topic,
+      topicValue,
+      statusId: options.statusId,
+      statusValue,
+      recordType,
+      recordId
+    });
+
+    const rec = record.create({
+      type: QUEUE_RECORD_TYPE,
+      isDynamic: true
+    });
+
+    rec.setValue({ fieldId: FIELDS.TOPIC,  value: topicValue });
+    rec.setValue({ fieldId: FIELDS.RECORD_ID, value: recordId });
+
+    if (recordType) {
+      rec.setValue({ fieldId: FIELDS.RECORD_TYPE, value: recordType });
+    }
+
+    // si c’est un article, on remplit aussi le champ "Item"
+    if (recordType && recordType.indexOf('item') !== -1) {
+      const numericId = parseInt(recordId, 10);
+      if (!isNaN(numericId)) {
+        rec.setValue({ fieldId: FIELDS.ITEM, value: numericId });
+      }
+    }
+
+    // date du jour
+    rec.setValue({ fieldId: FIELDS.DATE_SYNC, value: new Date() });
+
+    // statut initial
+    rec.setValue({ fieldId: FIELDS.STATUS, value: statusValue });
+
+    const queueId = rec.save({ enableSourcing: false, ignoreMandatoryFields: true });
+
+    log.audit('Queue.enqueue - queued', {
+      queueId,
+      topicValue,
+      statusValue
+    });
+
+    return queueId;
+  }
+
+  /**
+   * findExisting : utilisé par ton UE pour retrouver une ligne existante
+   *
+   * options = {
+   *   topic: 'ITEM' ou internalid,
+   *   recordType: rec.type,
+   *   recordId: rec.id
+   * }
+   */
+  function findExisting(options) {
+    const topicValue = mapTopicLabel(options.topic);
+    const recordType = options.recordType || '';
+    const recordId   = String(options.recordId);
+
+    const s = search.create({
+      type: QUEUE_RECORD_TYPE,
+      filters: [
+        [FIELDS.TOPIC, 'is', topicValue],
+        'AND',
+        [FIELDS.RECORD_TYPE, 'is', recordType],
+        'AND',
+        [FIELDS.RECORD_ID, 'is', recordId]
+      ],
+      columns: ['internalid']
+    });
+
+    const res = s.run().getRange({ start: 0, end: 1 });
+    if (res && res.length) {
+      const id = res[0].getValue({ name: 'internalid' });
+      log.debug('Queue.findExisting - found', { id, topicValue, recordType, recordId });
+      return id;
+    }
+
+    log.debug('Queue.findExisting - none', { topicValue, recordType, recordId });
+    return null;
+  }
+
+  /**
+   * updateStatus : utilisé par ton UE pour passer Ready / Pending
+   *
+   * @param {number|string} queueId
+   * @param {string} statusId  → 'Ready', 'Pending', etc. (label)
+   */
+  function updateStatus(queueId, statusId) {
+    const statusValue = mapStatusLabel(statusId);
+
+    log.debug('Queue.updateStatus', {
+      queueId,
+      statusId,
+      statusValue
+    });
+
+    record.submitFields({
+      type: QUEUE_RECORD_TYPE,
+      id: queueId,
+      values: {
+        [FIELDS.STATUS]: statusValue
+      },
+      options: {
+        enableSourcing: false,
+        ignoreMandatoryFields: true
+      }
+    });
+  }
+
+  return {
+    enqueue,
+    findExisting,
+    updateStatus,
+    STATUS,
+    TOPIC,
+    FIELDS
+  };
 });
