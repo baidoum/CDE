@@ -13,6 +13,10 @@ define([
   './CDE_WMS_FileHeader'
 ], (search, record, runtime, log, file, QueueUtil, FileHeader) => {
 
+    // Paramètres de nommage fichier export WMS
+  const FILE_PREFIX = 'ART';        
+  const OWNER_CODE  = 'XXXXXX';     
+
   function getInputData() {
     log.audit('ItemExportMR.getInputData', 'Start');
 
@@ -146,9 +150,7 @@ define([
     }
 
     const fileContent = lines.join('\n');
-    const fileNamePrefix = FileHeader.getFileNamePrefix(topic);
-    const ts = formatTimestamp(new Date());
-    const fileName = `${fileNamePrefix}${ts}.csv`;
+    var fileName = FileHeader.buildFileName(topic);
 
     const folderId = getOutputFolderId();
     if (!folderId) {
@@ -266,19 +268,6 @@ define([
     }).join(sep);
   }
 
-  function formatTimestamp(d) {
-    const yyyy = d.getFullYear();
-    const MM = pad2(d.getMonth() + 1);
-    const dd = pad2(d.getDate());
-    const hh = pad2(d.getHours());
-    const mm = pad2(d.getMinutes());
-    const ss = pad2(d.getSeconds());
-    return `${yyyy}${MM}${dd}_${hh}${mm}${ss}`;
-  }
-
-  function pad2(n) {
-    return (n < 10 ? '0' : '') + n;
-  }
 
   function getOutputFolderId() {
     const script = runtime.getCurrentScript();

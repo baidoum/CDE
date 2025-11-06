@@ -173,23 +173,54 @@ define([], function () {
         return cols.join(sep);
     }
 
-    /**
-     * (Optionnel) Préfixe de nom de fichier par topic.
-     * Pratique si tu veux des noms de fichiers standardisés côté WMS.
-     */
-    function getFileNamePrefix(topic) {
-        switch (topic) {
-            case TOPIC.ITEM:
-                return 'ITEM_EXPORT_';
-            default:
-                return 'WMS_EXPORT_';
+
+            /**
+         * Retourne le nom complet du fichier à générer pour un topic donné.
+         * Format : <PREFIX><OWNER_CODE><YYYYMMDDhhmmss>.txt
+         *
+         * Exemple : ARTXXXXXX20251106163545.txt
+         */
+        function buildFileName(topic) {
+            // Codes WMS attendus par type de flux
+            const FILE_PREFIX_BY_TOPIC = {
+                [TOPIC.ITEM]: 'ART',      // Articles
+                // [TOPIC.LOT]: 'LOT',    // Lots (à activer plus tard)
+                // [TOPIC.MOV]: 'MOV',    // Mouvements
+                // [TOPIC.TRANSFER]: 'TRA' // Transferts
+            };
+
+            const OWNER_CODE = 'XXXXXX';  // Code du donneur d’ordre → à rendre paramétrable plus tard
+            const EXTENSION  = '.csv';
+            const timestamp  = formatTimestamp(new Date());
+
+            // Si le topic n’est pas trouvé, on met un préfixe générique
+            const prefix = FILE_PREFIX_BY_TOPIC[topic] || 'WMS';
+
+            return `${prefix}${OWNER_CODE}${timestamp}${EXTENSION}`;
         }
-    }
+
+        /**
+         * Helper pour timestamp : YYYYMMDDhhmmss
+         */
+        function formatTimestamp(d) {
+            const yyyy = d.getFullYear();
+            const MM = pad2(d.getMonth() + 1);
+            const dd = pad2(d.getDate());
+            const hh = pad2(d.getHours());
+            const mm = pad2(d.getMinutes());
+            const ss = pad2(d.getSeconds());
+            return `${yyyy}${MM}${dd}${hh}${mm}${ss}`;
+        }
+
+        function pad2(n) {
+            return (n < 10 ? '0' : '') + n;
+        }
+
 
     return {
         TOPIC: TOPIC,
         getHeaderColumns: getHeaderColumns,
         buildHeaderLine: buildHeaderLine,
-        getFileNamePrefix: getFileNamePrefix
+        buildFileName: buildFileName
     };
 });
