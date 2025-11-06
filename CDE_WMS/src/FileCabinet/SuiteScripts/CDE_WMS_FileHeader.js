@@ -11,7 +11,7 @@ define([], function () {
 
     // Topics fonctionnels (doit rester cohérent avec CDE_WMS_QueueUtil.TOPIC)
     var TOPIC = {
-        ITEM: 'ITEM'
+        ITEM: 1
         // FUTUR : TRANSFER: 'TRANSFER', RECEIPT: 'RECEIPT', etc.
     };
 
