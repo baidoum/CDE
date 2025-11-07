@@ -13,9 +13,6 @@ define([
   './CDE_WMS_FileHeader'
 ], (search, record, runtime, log, file, QueueUtil, FileHeader) => {
 
-    // Paramètres de nommage fichier export WMS
-  const FILE_PREFIX = 'ART';        
-  const OWNER_CODE  = 'XXXXXX';     
 
   function getInputData() {
     log.audit('ItemExportMR.getInputData', 'Start');
@@ -178,7 +175,10 @@ define([
         lines: lines.length - 1
       });
 
-      queueIdsDone.forEach((id) => markQueueStatus(id, QueueUtil.STATUS.DONE));
+      queueIdsDone.forEach(function (id) {
+        markQueueStatus(id, QueueUtil.STATUS.DONE);
+        linkQueueToFile(id, fileId);
+      });
       queueIdsError.forEach((id) => markQueueStatus(id, QueueUtil.STATUS.ERROR));
 
     } catch (eFile) {
@@ -213,6 +213,29 @@ define([
   }
 
   // ---------- Helpers ----------
+
+  function linkQueueToFile(queueId, fileId) {
+    try {
+        record.submitFields({
+            type: 'customrecord_cde_item_sync_queue',
+            id: queueId,
+            values: {
+                custrecord_sync_file: fileId
+            },
+            options: {
+                enableSourcing: false,
+                ignoreMandatoryFields: true
+            }
+        });
+    } catch (e) {
+        log.error('linkQueueToFile - ERROR', {
+            queueId: queueId,
+            fileId: fileId,
+            error: e.message
+        });
+    }
+}
+
 
   function markQueueStatus(queueId, statusValue, errorMsg) {
       try {
