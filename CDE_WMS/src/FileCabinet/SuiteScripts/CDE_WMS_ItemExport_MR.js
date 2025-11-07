@@ -141,7 +141,9 @@ define([
           stack: eLine.stack
         });
         queueIdsError.push(queueId);
+        markQueueStatus(queueId, QueueUtil.STATUS.ERROR, 'REDUCE load/build: ' + eLine.message);
       }
+      
     });
 
     if (lines.length <= 1) {
@@ -182,6 +184,7 @@ define([
     } catch (eFile) {
       log.error('REDUCE - file save error', { error: eFile.message, stack: eFile.stack });
       queueIdsDone.concat(queueIdsError).forEach((id) => markQueueStatus(id, QueueUtil.STATUS.ERROR));
+      markQueueStatus(id, QueueUtil.STATUS.ERROR, errMsg);
     }
   }
 
@@ -211,20 +214,37 @@ define([
 
   // ---------- Helpers ----------
 
-  function markQueueStatus(queueId, statusValue) {
-    try {
-      record.submitFields({
-        type: 'customrecord_cde_item_sync_queue',
-        id: queueId,
-        values: {
-          custrecord_sync_status: statusValue
-        },
-        options: { enableSourcing: false, ignoreMandatoryFields: true }
-      });
-    } catch (e) {
-      log.error('markQueueStatus ERROR', { queueId, statusValue, error: e.message });
-    }
+  function markQueueStatus(queueId, statusValue, errorMsg) {
+      try {
+          var values = {
+              custrecord_sync_status: statusValue
+          };
+
+          // On nettoie et on tronque le message d'erreur si fourni
+          if (errorMsg) {
+              var msg = String(errorMsg);
+              // 1000 caractères par ex., pour éviter les erreurs de longueur
+              values.custrecord_sync_error_msg = msg.substring(0, 1000);
+          }
+
+          record.submitFields({
+              type: 'customrecord_cde_item_sync_queue',
+              id: queueId,
+              values: values,
+              options: {
+                  enableSourcing: false,
+                  ignoreMandatoryFields: true
+              }
+          });
+      } catch (e) {
+          log.error('markQueueStatus - ERROR', {
+              queueId: queueId,
+              statusValue: statusValue,
+              error: e.message
+          });
+      }
   }
+
 
   function sanitizeValue(val) {
     if (val === null || val === undefined) return '';
@@ -248,6 +268,12 @@ define([
 
         case 'UsesSerialNo':
           return p.usesSerial ? '1' : '0';
+
+        case 'UsesDateFab':
+          return '0';
+
+        case 'GereStock':
+          return '1';
 
         case 'UnitOfMeasure':
           return sanitizeValue(p.uom);

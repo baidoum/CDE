@@ -13,7 +13,8 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
     FILE:        'custrecord_sync_file',
     RECORD_ID:   'custrecord_sync_record_id',
     TOPIC:       'custrecord_sync_topic',
-    ITEM:        'custrecord_sync_item'
+    ITEM:        'custrecord_sync_item',
+    ERROR_MSG:   'custrecord_sync_error_msg'
   };
 
   /**
