@@ -34,7 +34,8 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
    * Exemple: valeur "ITEM" dans ta liste = internalid 1 → '1'.
    */
   const TOPIC_MAP = {
-    ITEM: '1'
+    ITEM: '1',
+    SALES_ORDER: '2'
   };
 
   const STATUS = {
@@ -46,7 +47,8 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
   };
 
   const TOPIC = {
-    ITEM: TOPIC_MAP.ITEM
+    ITEM: TOPIC_MAP.ITEM,
+    SALES_ORDER: TOPIC_MAP.SALES_ORDER
   };
 
   function mapStatusLabel(statusId) {
