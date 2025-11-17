@@ -304,7 +304,6 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
             quantity: qty
         });
 
-        // on ignore seulement les lignes SANS item (vraies lignes vides)
         if (!itemId) {
             continue;
         }
@@ -335,24 +334,34 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
 
         var kitFlag = '0';
         if (itemType === 'Kit') {
-            kitFlag = '2'; // kit parent
+            kitFlag = '2';
         }
 
-        // Tentative de lire le détail d'inventaire (lot / série)
         var invDetail = null;
+        var assCount  = 0;
         try {
             invDetail = soRec.getSublistSubrecord({
                 sublistId: 'item',
                 fieldId: 'inventorydetail',
                 line: i
             });
+            if (invDetail) {
+                assCount = invDetail.getLineCount({ sublistId: 'inventoryassignment' });
+            }
         } catch (e) {
             invDetail = null;
+            assCount = 0;
         }
 
-        if (invDetail) {
-            // CAS 1 : article lot/série → une ligne par lot
-            var assCount = invDetail.getLineCount({ sublistId: 'inventoryassignment' });
+        log.debug('SO line inventory detail', {
+            soId: soId,
+            line: i,
+            hasInvDetail: !!invDetail,
+            assCount: assCount
+        });
+
+        if (invDetail && assCount > 0) {
+            // CAS 1 : avec lots → une ligne par lot
             for (var j = 0; j < assCount; j++) {
                 var lotNumber = invDetail.getSublistText({
                     sublistId: 'inventoryassignment',
@@ -388,7 +397,7 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
                 lines.push(csvLine);
             }
         } else {
-            // CAS 2 : article non lot/série → une ligne par ligne de commande
+            // CAS 2 : pas de lots (ou subrecord vide) → une ligne par ligne de commande
             var lineDataSingle = {
                 LineNumber:        lineNumber,
                 ItemNumber:        itemDisplay,
@@ -419,6 +428,7 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
 
     return lines;
 }
+
 
 
 
