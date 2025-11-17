@@ -229,9 +229,10 @@ define([
 
     // ---------- Helpers ----------
 
-    function buildLinesForSalesOrder(soRec, headerCols, sep) {
+function buildLinesForSalesOrder(soRec, headerCols, sep) {
     var lines = [];
     var soId = soRec.id || soRec.getValue({ fieldId: 'tranid' });
+    var separator = sep || ';';
 
     var lineCount = soRec.getLineCount({ sublistId: 'item' });
     log.debug('SO Lines', {
@@ -303,7 +304,7 @@ define([
             quantity: qty
         });
 
-        // On ignore uniquement les lignes sans item (vraies "blank" / commentaires)
+        // on ignore seulement les lignes SANS item (vraies lignes vides)
         if (!itemId) {
             continue;
         }
@@ -334,9 +335,10 @@ define([
 
         var kitFlag = '0';
         if (itemType === 'Kit') {
-            kitFlag = '2'; // kit parent (on affinera si besoin)
+            kitFlag = '2'; // kit parent
         }
 
+        // Tentative de lire le détail d'inventaire (lot / série)
         var invDetail = null;
         try {
             invDetail = soRec.getSublistSubrecord({
@@ -348,10 +350,9 @@ define([
             invDetail = null;
         }
 
-        // CAS 1 : lot / sérialisé → plusieurs lignes par lot
         if (invDetail) {
+            // CAS 1 : article lot/série → une ligne par lot
             var assCount = invDetail.getLineCount({ sublistId: 'inventoryassignment' });
-
             for (var j = 0; j < assCount; j++) {
                 var lotNumber = invDetail.getSublistText({
                     sublistId: 'inventoryassignment',
@@ -374,7 +375,7 @@ define([
                     KitouComposant:    kitFlag,
                     KitItemNumber:     '',
                     KitLineNumber:     '',
-                    NbParKit:          '',
+                    NbParkit:          '',
                     PointRelais:       '',
                     Zone:              soRec.getValue({ fieldId: 'custbody_cde_zone_erp' }) || '',
                     UnitOfMeasure:     uom,
@@ -383,11 +384,11 @@ define([
                     LineNumberERP:     lineNumber
                 };
 
-                var csvLine = buildSOExportLine(headerCols, headerData, lineData, sep);
+                var csvLine = buildSOExportLine(headerCols, headerData, lineData, separator);
                 lines.push(csvLine);
             }
         } else {
-            // CAS 2 : pas de détail de lot → une ligne par ligne article
+            // CAS 2 : article non lot/série → une ligne par ligne de commande
             var lineDataSingle = {
                 LineNumber:        lineNumber,
                 ItemNumber:        itemDisplay,
@@ -397,7 +398,7 @@ define([
                 KitouComposant:    kitFlag,
                 KitItemNumber:     '',
                 KitLineNumber:     '',
-                NbParKit:          '',
+                NbParkit:          '',
                 PointRelais:       '',
                 Zone:              soRec.getValue({ fieldId: 'custbody_cde_zone_erp' }) || '',
                 UnitOfMeasure:     uom,
@@ -406,7 +407,7 @@ define([
                 LineNumberERP:     lineNumber
             };
 
-            var csvLineSingle = buildSOExportLine(headerCols, headerData, lineDataSingle, sep);
+            var csvLineSingle = buildSOExportLine(headerCols, headerData, lineDataSingle, separator);
             lines.push(csvLineSingle);
         }
     }
@@ -420,75 +421,79 @@ define([
 }
 
 
+
     /**
      * Construit une ligne CSV en combinant :
      * - les données d'entête (headerData)
      * - les données de ligne (lineData)
      * selon l'ordre des colonnes défini dans headerCols.
      */
-    function buildSOExportLine(headerCols, headerData, lineData, sep) {
-        return headerCols.map(function (col) {
-            switch (col) {
-                case 'Owner':                return sanitizeValue(headerData.Owner);
-                case 'Site':                 return sanitizeValue(headerData.Site);
-                case 'OrderNumber':          return sanitizeValue(headerData.OrderNumber);
-                case 'OrderDate':            return sanitizeValue(headerData.OrderDate);
-                case 'DueDate':              return sanitizeValue(headerData.DueDate);
+   function buildSOExportLine(headerCols, headerData, lineData, sep) {
+    var separator = sep || ';';
 
-                case 'CustomerBillTo':       return sanitizeValue(headerData.CustomerBillTo);
-                case 'CBTCompanyName':       return sanitizeValue(headerData.CBTCompanyName);
-                case 'CBTAddress1':          return sanitizeValue(headerData.CBTAddress1);
-                case 'CBTAddress2':          return sanitizeValue(headerData.CBTAddress2);
-                case 'CBTAddress3':          return sanitizeValue(headerData.CBTAddress3);
-                case 'CBTZipCode':           return sanitizeValue(headerData.CBTZipCode);
-                case 'CBTCity':              return sanitizeValue(headerData.CBTCity);
-                case 'CBTState':             return sanitizeValue(headerData.CBTState);
-                case 'CBTCountry':           return sanitizeValue(headerData.CBTCounty);
-                case 'CBTContact':           return sanitizeValue(headerData.CBTContact);
-                case 'CBTVoicePhone':        return sanitizeValue(headerData.CBTVoicePhone);
-                case 'CBTEmail':             return sanitizeValue(headerData.CBTEmail);
+    return headerCols.map(function (col) {
+        switch (col) {
+            case 'Owner':                return sanitizeValue(headerData.Owner);
+            case 'Site':                 return sanitizeValue(headerData.Site);
+            case 'OrderNumber':          return sanitizeValue(headerData.OrderNumber);
+            case 'OrderDate':            return sanitizeValue(headerData.OrderDate);
+            case 'DueDate':              return sanitizeValue(headerData.DueDate);
 
-                case 'CustomerShipTo':       return sanitizeValue(headerData.CustomerShipTo);
-                case 'CSTCompanyName':       return sanitizeValue(headerData.CSTCompanyName);
-                case 'CSTAddress1':          return sanitizeValue(headerData.CSTAddress1);
-                case 'CSTAddress2':          return sanitizeValue(headerData.CSTAddress2);
-                case 'CSTAddress3':          return sanitizeValue(headerData.CSTAddress3);
-                case 'CSTZipCode':           return sanitizeValue(headerData.CSTZipCode);
-                case 'CSTCity':              return sanitizeValue(headerData.CSTCity);
-                case 'CSTState':             return sanitizeValue(headerData.CSTState);
-                case 'CSTCountry':           return sanitizeValue(headerData.CSTCountry);
-                case 'CSTContact':           return sanitizeValue(headerData.CSTContact);
-                case 'CSTVoicePhone':        return sanitizeValue(headerData.CSTVoicePhone);
-                case 'CSTEmail':             return sanitizeValue(headerData.CSTEmail);
+            case 'CustomerBillTo':       return sanitizeValue(headerData.CustomerBillTo);
+            case 'CBTCompanyName':       return sanitizeValue(headerData.CBTCompanyName);
+            case 'CBTAddress1':          return sanitizeValue(headerData.CBTAddress1);
+            case 'CBTAddress2':          return sanitizeValue(headerData.CBTAddress2);
+            case 'CBTAddress3':          return sanitizeValue(headerData.CBTAddress3);
+            case 'CBTZipCode':           return sanitizeValue(headerData.CBTZipCode);
+            case 'CBTCity':              return sanitizeValue(headerData.CBTCity);
+            case 'CBTState':             return sanitizeValue(headerData.CBTState);
+            case 'CBTCountry':           return sanitizeValue(headerData.CBTCounty);
+            case 'CBTContact':           return sanitizeValue(headerData.CBTContact);
+            case 'CBTVoicePhone':        return sanitizeValue(headerData.CBTVoicePhone);
+            case 'CBTEmail':             return sanitizeValue(headerData.CBTEmail);
 
-                case 'Carrier':              return sanitizeValue(headerData.Carrier);
-                case 'ShippingMethod':       return sanitizeValue(headerData.ShippingMethod);
-                case 'Commentaire':          return sanitizeValue(headerData.Commentaire);
+            case 'CustomerShipTo':       return sanitizeValue(headerData.CustomerShipTo);
+            case 'CSTCompanyName':       return sanitizeValue(headerData.CSTCompanyName);
+            case 'CSTAddress1':          return sanitizeValue(headerData.CSTAddress1);
+            case 'CSTAddress2':          return sanitizeValue(headerData.CSTAddress2);
+            case 'CSTAddress3':          return sanitizeValue(headerData.CSTAddress3);
+            case 'CSTZipCode':           return sanitizeValue(headerData.CSTZipCode);
+            case 'CSTCity':              return sanitizeValue(headerData.CSTCity);
+            case 'CSTState':             return sanitizeValue(headerData.CSTState);
+            case 'CSTCountry':           return sanitizeValue(headerData.CSTCountry);
+            case 'CSTContact':           return sanitizeValue(headerData.CSTContact);
+            case 'CSTVoicePhone':        return sanitizeValue(headerData.CSTVoicePhone);
+            case 'CSTEmail':             return sanitizeValue(headerData.CSTEmail);
 
-                case 'LineNumber':           return sanitizeValue(lineData.LineNumber);
-                case 'ItemNumber':           return sanitizeValue(lineData.ItemNumber);
-                case 'OrderedQuantity':      return sanitizeValue(lineData.OrderedQuantity);
-                case 'Comment':              return sanitizeValue(lineData.Comment);
-                case 'Enseigne':             return sanitizeValue(lineData.Enseigne);
+            case 'Carrier':              return sanitizeValue(headerData.Carrier);
+            case 'ShippingMethod':       return sanitizeValue(headerData.ShippingMethod);
+            case 'Commentaire':          return sanitizeValue(headerData.Commentaire);
 
-                case 'KitouComposant':       return sanitizeValue(lineData.KitouComposant);
-                case 'KitItemNumber':        return sanitizeValue(lineData.KitItemNumber);
-                case 'KitLineNumber':        return sanitizeValue(lineData.KitLineNumber);
-                case 'NbParkit':             return sanitizeValue(lineData.NbParKit);
-                case 'PointRelais':          return sanitizeValue(lineData.PointRelais);
+            case 'LineNumber':           return sanitizeValue(lineData.LineNumber);
+            case 'ItemNumber':           return sanitizeValue(lineData.ItemNumber);
+            case 'OrderedQuantity':      return sanitizeValue(lineData.OrderedQuantity);
+            case 'Comment':              return sanitizeValue(lineData.Comment);
+            case 'Enseigne':             return sanitizeValue(lineData.Enseigne);
 
-                case 'Zone':                 return sanitizeValue(lineData.Zone);
-                case 'UnitOfMeasure':        return sanitizeValue(lineData.UnitOfMeasure);
-                case 'LotNumber':            return sanitizeValue(lineData.LotNumber);
-                case 'UV':                   return sanitizeValue(lineData.UV);
-                case 'LineNumberERP':        return sanitizeValue(lineData.LineNumberERP);
+            case 'KitouComposant':       return sanitizeValue(lineData.KitouComposant);
+            case 'KitItemNumber':        return sanitizeValue(lineData.KitItemNumber);
+            case 'KitLineNumber':        return sanitizeValue(lineData.KitLineNumber);
+            case 'NbParkit':             return sanitizeValue(lineData.NbParKit);
+            case 'PointRelais':          return sanitizeValue(lineData.PointRelais);
 
-                // TODO: compléter progressivement le mapping pour toutes les autres colonnes (BF...EP)
-                default:
-                    return '';
-            }
-        }).join(sep);
-    }
+            case 'Zone':                 return sanitizeValue(lineData.Zone);
+            case 'UnitOfMeasure':        return sanitizeValue(lineData.UnitOfMeasure);
+            case 'LotNumber':            return sanitizeValue(lineData.LotNumber);
+            case 'UV':                   return sanitizeValue(lineData.UV);
+            case 'LineNumberERP':        return sanitizeValue(lineData.LineNumberERP);
+
+            // les autres colonnes du header SO sont pour l'instant renvoyées vides
+            default:
+                return '';
+        }
+    }).join(separator);
+}
+
 
     function markQueueStatus(queueId, statusValue, errorMsg) {
         try {
