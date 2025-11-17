@@ -14,7 +14,8 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
     RECORD_ID:   'custrecord_sync_record_id',
     TOPIC:       'custrecord_sync_topic',
     ITEM:        'custrecord_sync_item',
-    ERROR_MSG:   'custrecord_sync_error_msg'
+    ERROR_MSG:   'custrecord_sync_error_msg',
+    SALES_ORDER: 'custrecord_cde_sync_sales_order'
   };
 
   /**
@@ -109,6 +110,18 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
         rec.setValue({ fieldId: FIELDS.ITEM, value: numericId });
       }
     }
+
+    // si c’est une Sales Order → on remplit custrecord_cde_sync_sales_order
+    if (recordType === 'salesorder') {
+        const numericId = parseInt(recordId, 10);
+        if (!isNaN(numericId)) {
+            rec.setValue({
+                fieldId: FIELDS.SALES_ORDER,
+                value: numericId
+            });
+        }
+    }
+
 
     // date du jour
     rec.setValue({ fieldId: FIELDS.DATE_SYNC, value: new Date() });

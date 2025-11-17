@@ -11,8 +11,8 @@ define([], function () {
 
     // Topics fonctionnels (doit rester cohérent avec CDE_WMS_QueueUtil.TOPIC)
     var TOPIC = {
-        ITEM: 1
-        // FUTUR : TRANSFER: 'TRANSFER', RECEIPT: 'RECEIPT', etc.
+        ITEM: 1,
+        SALES_ORDER: 2
     };
 
     /**
@@ -148,6 +148,155 @@ define([], function () {
         'Itm_IdERP'                            // 122 Itm_IdERP
     ];
 
+    HEADERS_BY_TOPIC[TOPIC.SALES_ORDER] = [
+    'Owner',                // 1
+    'Site',                 // 2
+    'OrderNumber',          // 3
+    'OrderDate',            // 4
+    'DueDate',              // 5
+    'CustomerBillTo',       // 6
+    'CBTCompanyName',       // 7
+    'CBTAddress1',          // 8
+    'CBTAddress2',          // 9
+    'CBTAddress3',          // 10
+    'CBTZipCode',           // 11
+    'CBTCity',              // 12
+    'CBTState',             // 13
+    'CBTCountry',           // 14
+    'CBTContact',           // 15
+    'CBTVoicePhone',        // 16
+    'CBTFaxPhone',          // 17
+    'CBTEmail',             // 18
+    'CustomerShipTo',       // 19
+    'CSTCompanyName',       // 20
+    'CSTAddress1',          // 21
+    'CSTAddress2',          // 22
+    'CSTAddress3',          // 23
+    'CSTZipCode',           // 24
+    'CSTCity',              // 25
+    'CSTState',             // 26
+    'CSTCountry',           // 27
+    'CSTContact',           // 28
+    'CSTVoicePhone',        // 29
+    'CSTFaxPhone',          // 30
+    'CSTEmail',             // 31
+    'Carrier',              // 32
+    'ShippingMethod',       // 33
+    'Commentaire',          // 34
+    'LineNumber',           // 35
+    'ItemNumber',           // 36
+    'OrderedQuantity',      // 37
+    'Comment',              // 38
+    'Enseigne',             // 39
+    'KitouComposant',       // 40
+    'KitItemNumber',        // 41
+    'KitLineNumber',        // 42
+    'NbParkit',             // 43
+    'PointRelais',          // 44
+    'Tournee',              // 45 (Tournée)
+    'Zone',                 // 46
+    'UnitOfMeasure',        // 47
+    'SoucheOrderERP',       // 48
+    'CodeRepresentant',     // 49
+    'NomRepresentant',      // 50
+    'CodeLangueBL',         // 51
+    'CodeLangueLC',         // 52
+    'CodePaysISO2',         // 53
+    'CodePaysISO3',         // 54
+    'CustomerDocument',     // 55
+    'CCorderNumber',        // 56
+    'TypeDocument',         // 57 (Type de document ERP)
+    'PrixNet',              // 58
+    'PrixBrut',             // 59
+    'TauxTVA',              // 60
+    'QuantiteUV',           // 61
+    'UV',                   // 62
+    'CodeArticleAfficher',  // 63
+    'CodeOrigineCommande',  // 64
+    'CodeConditionLivraison', // 65
+    'NumeroPalette',        // 66
+    'LotNumber',            // 67 (Numéro de Lot)
+    'Couleur',              // 68
+    'CommandeClient',       // 69
+    'CustomerItemNumber',   // 70
+    'CustomerDescription1', // 71
+    'CustomerDescription2', // 72
+    'DoitEtreImprimeBL',    // 73
+    'ItemSuffixe',          // 74
+    'TransitTo',            // 75
+    'TransitCompanyName',   // 76
+    'TransitAddress1',      // 77
+    'TransitAddress2',      // 78
+    'TransitAddress3',      // 79
+    'TransitZipCode',       // 80
+    'TransitCity',          // 81
+    'TransitState',         // 82
+    'TransitCountry',       // 83
+    'TransitContact',       // 84
+    'TransitVoicePhone',    // 85
+    'TransitFaxPhone',      // 86
+    'TransitMobilePhone',   // 87
+    'TransitEmail',         // 88
+    'TransitCodePaysISO2',  // 89
+    'TransitCodePaysISO3',  // 90
+    'CommentaireClient',    // 91
+    'CommentaireTransporteur', // 92
+    'CommentaireLogistique',// 93
+    'SaisiPar',             // 94
+    'NumeroFacture',        // 95
+    'ImpressionFacture',    // 96
+    'PriseRDV',             // 97
+    'Hayon',                // 98
+    'ContactsLivraison',    // 99
+    'EmailLivraison',       // 100
+    'TypeClient',           // 101
+    'CBTMobilePhone',       // 102
+    'CSTMobilePhone',       // 103
+    'ShipDate',             // 104
+    'TypeTransporteur',     // 105
+    'Reserve1',             // 106
+    'CSTCodeEDI',           // 107
+    'CSTCodeEDIFournisseur',// 108
+    'ColisageAutorise',     // 109
+    'TypePrepa',            // 110
+    'Priorite',             // 111
+    'Regroupement',         // 112
+    'Affectation',          // 113
+    'VagueMultiBon',        // 114
+    'Reserve2',             // 115
+    'UniteMesureAPreparer', // 116
+    'MontantAssurance',     // 117
+    'MontantFraisPortHT',   // 118
+    'MontantProduitHT',     // 119
+    'MontantFactureTTC',    // 120
+    'FacturePDF',           // 121
+    'CBTCodeEDI',           // 122
+    'NombrePetrin',         // 123
+    'QuantiteParPetrin',    // 124
+    'ToleranceMoins',       // 125
+    'TolerancePlus',        // 126
+    'OFPesee',              // 127
+    'CodeRecette',          // 128
+    'CoefficientConsommation', // 129
+    'Poste',                // 130
+    'CustomerDueDate',      // 131
+    'CustomerOrderedQuantity', // 132
+    'DateFacture',          // 133
+    'DateDocument',         // 134
+    'NumeroSerie',          // 135
+    'ReferenceCommandeLigne', // 136
+    'CategorieEnvoiColissimo', // 137
+    'CodeFournisseur',      // 138
+    'DeviseFacture',        // 139
+    'ExtendedAPreparer',    // 140
+    'CodeFabricant',        // 141
+    'LineNumberERP',        // 142
+    'TexteConformite',      // 143
+    'TexteComplementaire',  // 144
+    'CertificatNumero'      // 145
+];
+
+
     /**
      * Retourne le tableau de noms de colonnes pour un topic donné.
      * @param {string} topic
@@ -184,7 +333,7 @@ define([], function () {
             // Codes WMS attendus par type de flux
             const FILE_PREFIX_BY_TOPIC = {
                 [TOPIC.ITEM]: 'ART',      // Articles
-                // [TOPIC.LOT]: 'LOT',    // Lots (à activer plus tard)
+                [TOPIC.SALES_ORDER]: 'PREP '
                 // [TOPIC.MOV]: 'MOV',    // Mouvements
                 // [TOPIC.TRANSFER]: 'TRA' // Transferts
             };
