@@ -123,6 +123,14 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
                 value: numericId
             });
         }
+    }else if(recordType === 'purchaseorder'){
+        const numericId = parseInt(recordId, 10);
+        if (!isNaN(numericId)) {
+            rec.setValue({
+                fieldId: FIELDS.PURCHASE_ORDER,
+                value: numericId
+            });
+        }
     }
 
 
