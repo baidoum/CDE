@@ -33,7 +33,6 @@ define([
             ],
             columns: [
                 search.createColumn({ name: 'internalid' }),
-                search.createColumn({ name: 'custrecord_cde_sync_purch_order' }), // lien direct PO (si tu l'ajoutes)
                 search.createColumn({ name: 'custrecord_sync_record_id' }),
                 search.createColumn({ name: 'custrecord_sync_record_type' })
             ]
@@ -47,15 +46,15 @@ define([
             var queueId = result.id;
 
             var poField    = values.custrecord_cde_sync_purch_order;
-            var poId       = poField && poField.value ? poField.value : null;
+            
             var recordIdTx = values.custrecord_sync_record_id;
             var recordType = values.custrecord_sync_record_type;
 
-            var finalPoId = poId || recordIdTx;
+            var finalPoId = recordIdTx;
 
             log.debug('MAP queue line', {
                 queueId: queueId,
-                poId: poId,
+                poId: finalPoId,
                 recordIdTxt: recordIdTx,
                 recordType: recordType
             });
