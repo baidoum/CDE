@@ -15,7 +15,8 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
     TOPIC:       'custrecord_sync_topic',
     ITEM:        'custrecord_sync_item',
     ERROR_MSG:   'custrecord_sync_error_msg',
-    SALES_ORDER: 'custrecord_cde_sync_sales_order'
+    SALES_ORDER: 'custrecord_cde_sync_sales_order',
+    PURCHASE_ORDER: 'custrecord_cde_sync_purchase_order'
   };
 
   /**
@@ -36,7 +37,8 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
    */
   const TOPIC_MAP = {
     ITEM: '1',
-    SALES_ORDER: '2'
+    SALES_ORDER: '2',
+    PURCHASE_ORDER: '3'
   };
 
   const STATUS = {
@@ -49,7 +51,8 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
 
   const TOPIC = {
     ITEM: TOPIC_MAP.ITEM,
-    SALES_ORDER: TOPIC_MAP.SALES_ORDER
+    SALES_ORDER: TOPIC_MAP.SALES_ORDER,
+    PURCHASE_ORDER: TOPIC_MAP.PURCHASE_ORDER
   };
 
   function mapStatusLabel(statusId) {
