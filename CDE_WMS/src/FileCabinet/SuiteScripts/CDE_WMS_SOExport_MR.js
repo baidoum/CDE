@@ -274,6 +274,12 @@ define([
 
         // ----- Parcours des lignes d'articles -----
         var lineCount = soRec.getLineCount({ sublistId: 'item' });
+
+        log.debug('SO Lines', {
+        soId: soRec.id,
+        lineCount: lineCount
+        });
+
         for (var i = 0; i < lineCount; i++) {
             var itemId = soRec.getSublistValue({
                 sublistId: 'item',
@@ -396,10 +402,23 @@ define([
                     LineNumberERP:     lineNumber
                 };
 
+                log.debug('SO line analysis', {
+                    soId: soRec.id,
+                    line: i,
+                    itemId: itemId,
+                    itemType: itemType,
+                    quantity: qty
+                });
+
                 var csvLineSingle = buildSOExportLine(headerCols, headerData, lineDataSingle, sep);
                 lines.push(csvLineSingle);
             }
         }
+
+        log.debug('SO export lines built', {
+            soId: soRec.id,
+            exportedLines: lines.length
+        });
 
         return lines;
     }
