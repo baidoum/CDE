@@ -205,12 +205,84 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
     });
   }
 
+  /**
+ * Récupère les infos d'adresses (facturation / livraison) d'une transaction.
+ * Utilisé par l'export SO WMS pour fiabiliser les champs adresses.
+ *
+ * @param {number|string} currentRecId - internalid de la transaction (Sales Order)
+ * @returns {{
+ *   shipaddressee: string, shipaddress1: string, shipaddress2: string, shipcity: string, shipzip: string, shipcountry: string, attention: string, phone: string,
+ *   billaddressee: string, billaddress1: string, billaddress2: string, billcity: string, billzip: string, billcountry: string
+ * }}
+ */
+function getAddressInfos(currentRecId) {
+    var adresseInfos = {
+        shipaddressee: '', shipaddress1: '', shipaddress2: '', shipcity: '', shipzip: '', shipcountry: '', attention: '', phone: '',
+        billaddressee: '', billaddress1: '', billaddress2: '', billcity: '', billzip: '', billcountry: ''
+    };
+
+    if (!currentRecId) {
+        return adresseInfos;
+    }
+
+    var orderSearch = search.create({
+        type: search.Type.TRANSACTION,
+        filters: [
+            ['internalidnumber', 'equalto', String(currentRecId)],
+            'AND',
+            ['mainline', 'is', 'T']
+        ],
+        columns: [
+            search.createColumn({ name: 'shipaddressee' }),
+            search.createColumn({ name: 'shipaddress1' }),
+            search.createColumn({ name: 'shipaddress2' }),
+            search.createColumn({ name: 'shipcity' }),
+            search.createColumn({ name: 'shipzip' }),
+            search.createColumn({ name: 'shipattention' }),    // ⚠️ ici shipattention (pas shippingattention)
+            search.createColumn({ name: 'shipcountry' }),
+            search.createColumn({ name: 'shipphone' }),
+            search.createColumn({ name: 'billaddressee' }),
+            search.createColumn({ name: 'billaddress1' }),
+            search.createColumn({ name: 'billaddress2' }),
+            search.createColumn({ name: 'billcity' }),
+            search.createColumn({ name: 'billzip' }),
+            search.createColumn({ name: 'billcountry' })
+        ]
+    });
+
+    var searchResult = orderSearch.run().getRange({ start: 0, end: 1 });
+
+    if (searchResult && searchResult.length > 0) {
+        var res = searchResult[0];
+
+        adresseInfos.shipaddressee = res.getValue('shipaddressee') || '';
+        adresseInfos.shipaddress1  = res.getValue('shipaddress1')  || '';
+        adresseInfos.shipaddress2  = res.getValue('shipaddress2')  || '';
+        adresseInfos.shipzip       = res.getValue('shipzip')       || '';
+        adresseInfos.shipcountry   = res.getValue('shipcountry')   || '';
+        adresseInfos.shipcity      = res.getValue('shipcity')      || '';
+        adresseInfos.attention     = res.getValue('shipattention') || '';
+        adresseInfos.phone         = res.getValue('shipphone')     || '';
+
+        adresseInfos.billaddressee = res.getValue('billaddressee') || '';
+        adresseInfos.billaddress1  = res.getValue('billaddress1')  || '';
+        adresseInfos.billaddress2  = res.getValue('billaddress2')  || '';
+        adresseInfos.billzip       = res.getValue('billzip')       || '';
+        adresseInfos.billcountry   = res.getValue('billcountry')   || '';
+        adresseInfos.billcity      = res.getValue('billcity')      || '';
+    }
+
+    return adresseInfos;
+}
+
+
   return {
     enqueue,
     findExisting,
     updateStatus,
     STATUS,
     TOPIC,
-    FIELDS
+    FIELDS,
+    getAddressInfos
   };
 });

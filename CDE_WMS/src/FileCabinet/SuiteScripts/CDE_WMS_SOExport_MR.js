@@ -239,6 +239,8 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
         soId: soId,
         lineCount: lineCount
     });
+    
+    var addr = QueueUtil.getAddressInfos(soRec.id);
 
     // ----- Données d'entête (répétées sur chaque ligne) -----
     var headerData = {
@@ -250,28 +252,33 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
 
         CustomerBillTo: soRec.getValue({ fieldId: 'entity' }) || '',
         CBTCompanyName: soRec.getText({ fieldId: 'entity' }) || '',
-        CBTAddress1:    soRec.getValue({ fieldId: 'billaddr1' }) || '',
-        CBTAddress2:    soRec.getValue({ fieldId: 'billaddr2' }) || '',
-        CBTAddress3:    soRec.getValue({ fieldId: 'billaddr3' }) || '',
-        CBTZipCode:     soRec.getValue({ fieldId: 'billzip' }) || '',
-        CBTCity:        soRec.getValue({ fieldId: 'billcity' }) || '',
-        CBTState:       soRec.getValue({ fieldId: 'billstate' }) || '',
-        CBTCounty:      soRec.getValue({ fieldId: 'billcountry' }) || '',
-        CBTContact:     soRec.getValue({ fieldId: 'billattention' }) || '',
-        CBTVoicePhone:  soRec.getValue({ fieldId: 'billphone' }) || '',
+
+        CustomerBillTo: soRec.getValue({ fieldId: 'entity' }) || '',             // code client facturé
+
+        CBTCompanyName: addr.billaddressee || '',                                // nom facturation
+        CBTAddress1:    addr.billaddress1  || '',
+        CBTAddress2:    addr.billaddress2  || '',
+        CBTAddress3:    '',                                                      // tu pourras compléter si besoin
+        CBTZipCode:     addr.billzip       || '',
+        CBTCity:        addr.billcity      || '',
+        CBTState:       '',                                                      // si tu n'as pas la notion de région
+        CBTCounty:      addr.billcountry   || '',
+        CBTContact:     '',                                                      // si tu as un champ contact spécifique, on pourra l'ajouter
+        CBTVoicePhone:  '',                                                      // à mapper si tu as un téléphone facturation
         CBTEmail:       soRec.getValue({ fieldId: 'custbody_cde_billto_email' }) || '',
 
-        CustomerShipTo: soRec.getValue({ fieldId: 'shipto' }) || '',
-        CSTCompanyName: soRec.getValue({ fieldId: 'shipaddressee' }) || '',
-        CSTAddress1:    soRec.getValue({ fieldId: 'shipaddr1' }) || '',
-        CSTAddress2:    soRec.getValue({ fieldId: 'shipaddr2' }) || '',
-        CSTAddress3:    soRec.getValue({ fieldId: 'shipaddr3' }) || '',
-        CSTZipCode:     soRec.getValue({ fieldId: 'shipzip' }) || '',
-        CSTCity:        soRec.getValue({ fieldId: 'shipcity' }) || '',
-        CSTState:       soRec.getValue({ fieldId: 'shipstate' }) || '',
-        CSTCountry:     soRec.getValue({ fieldId: 'shipcountry' }) || '',
-        CSTContact:     soRec.getValue({ fieldId: 'shipattention' }) || '',
-        CSTVoicePhone:  soRec.getValue({ fieldId: 'shipphone' }) || '',
+
+        CustomerShipTo: soRec.getValue({ fieldId: 'shipto' }) || '',             // code adresse livrée si tu as un custom
+        CSTCompanyName: addr.shipaddressee || '',
+        CSTAddress1:    addr.shipaddress1  || '',
+        CSTAddress2:    addr.shipaddress2  || '',
+        CSTAddress3:    '',
+        CSTZipCode:     addr.shipzip       || '',
+        CSTCity:        addr.shipcity      || '',
+        CSTState:       '',                                                     // idem région
+        CSTCountry:     addr.shipcountry   || '',
+        CSTContact:     addr.attention     || '',
+        CSTVoicePhone:  addr.phone         || '',
         CSTEmail:       soRec.getValue({ fieldId: 'custbody_cde_shipto_email' }) || '',
 
         Carrier:        soRec.getText({ fieldId: 'shipcarrier' }) || '',
