@@ -230,164 +230,145 @@ define([
     // ---------- Helpers ----------
 
     function buildLinesForSalesOrder(soRec, headerCols, sep) {
-        var lines = [];
+    var lines = [];
+    var soId = soRec.id || soRec.getValue({ fieldId: 'tranid' });
 
-        // ----- Données d'entête (répétées sur chaque ligne) -----
-        var headerData = {
-            // TODO: adapter ces champs selon ton modèle NetSuite exact
-            Owner:          soRec.getValue({ fieldId: 'custbody_cde_owner' }) || '',         // po_Owner
-            Site:           soRec.getText({ fieldId: 'location' }) || '',                    // Site
-            OrderNumber:    soRec.getValue({ fieldId: 'tranid' }) || '',                     // OrderNumber
-            OrderDate:      formatDateYYYYMMDD(soRec.getValue({ fieldId: 'trandate' })),     // OrderDate
-            DueDate:        formatDateYYYYMMDD(soRec.getValue({ fieldId: 'duedate' })),      // DueDate
-
-            CustomerBillTo: soRec.getValue({ fieldId: 'entity' }) || '',                     // code client facturé (ID)
-            CBTCompanyName: soRec.getText({ fieldId: 'entity' }) || '',                      // nom client facturé
-            CBTAddress1:    soRec.getValue({ fieldId: 'billaddr1' }) || '',
-            CBTAddress2:    soRec.getValue({ fieldId: 'billaddr2' }) || '',
-            CBTAddress3:    soRec.getValue({ fieldId: 'billaddr3' }) || '',
-            CBTZipCode:     soRec.getValue({ fieldId: 'billzip' }) || '',
-            CBTCity:        soRec.getValue({ fieldId: 'billcity' }) || '',
-            CBTState:       soRec.getValue({ fieldId: 'billstate' }) || '',
-            CBTCounty:      soRec.getValue({ fieldId: 'billcountry' }) || '',
-            CBTContact:     soRec.getValue({ fieldId: 'billattention' }) || '',
-            CBTVoicePhone:  soRec.getValue({ fieldId: 'billphone' }) || '',
-            CBTEmail:       soRec.getValue({ fieldId: 'custbody_cde_billto_email' }) || '',
-
-            CustomerShipTo: soRec.getValue({ fieldId: 'shipto' }) || '',                     // code adresse livrée (à adapter)
-            CSTCompanyName: soRec.getValue({ fieldId: 'shipaddressee' }) || '',
-            CSTAddress1:    soRec.getValue({ fieldId: 'shipaddr1' }) || '',
-            CSTAddress2:    soRec.getValue({ fieldId: 'shipaddr2' }) || '',
-            CSTAddress3:    soRec.getValue({ fieldId: 'shipaddr3' }) || '',
-            CSTZipCode:     soRec.getValue({ fieldId: 'shipzip' }) || '',
-            CSTCity:        soRec.getValue({ fieldId: 'shipcity' }) || '',
-            CSTState:       soRec.getValue({ fieldId: 'shipstate' }) || '',
-            CSTCountry:     soRec.getValue({ fieldId: 'shipcountry' }) || '',
-            CSTContact:     soRec.getValue({ fieldId: 'shipattention' }) || '',
-            CSTVoicePhone:  soRec.getValue({ fieldId: 'shipphone' }) || '',
-            CSTEmail:       soRec.getValue({ fieldId: 'custbody_cde_shipto_email' }) || '',
-
-            Carrier:        soRec.getText({ fieldId: 'shipcarrier' }) || '',                // selon ton paramétrage
-            ShippingMethod: soRec.getText({ fieldId: 'shipmethod' }) || '',
-            Commentaire:    soRec.getValue({ fieldId: 'memo' }) || ''                       // commentaire SO
-        };
-
-        // ----- Parcours des lignes d'articles -----
-        var lineCount = soRec.getLineCount({ sublistId: 'item' });
-
-        log.debug('SO Lines', {
-        soId: soRec.id,
+    var lineCount = soRec.getLineCount({ sublistId: 'item' });
+    log.debug('SO Lines', {
+        soId: soId,
         lineCount: lineCount
+    });
+
+    // ----- Données d'entête (répétées sur chaque ligne) -----
+    var headerData = {
+        Owner:          soRec.getValue({ fieldId: 'custbody_cde_owner' }) || '',
+        Site:           soRec.getText({ fieldId: 'location' }) || '',
+        OrderNumber:    soRec.getValue({ fieldId: 'tranid' }) || '',
+        OrderDate:      formatDateYYYYMMDD(soRec.getValue({ fieldId: 'trandate' })),
+        DueDate:        formatDateYYYYMMDD(soRec.getValue({ fieldId: 'duedate' })),
+
+        CustomerBillTo: soRec.getValue({ fieldId: 'entity' }) || '',
+        CBTCompanyName: soRec.getText({ fieldId: 'entity' }) || '',
+        CBTAddress1:    soRec.getValue({ fieldId: 'billaddr1' }) || '',
+        CBTAddress2:    soRec.getValue({ fieldId: 'billaddr2' }) || '',
+        CBTAddress3:    soRec.getValue({ fieldId: 'billaddr3' }) || '',
+        CBTZipCode:     soRec.getValue({ fieldId: 'billzip' }) || '',
+        CBTCity:        soRec.getValue({ fieldId: 'billcity' }) || '',
+        CBTState:       soRec.getValue({ fieldId: 'billstate' }) || '',
+        CBTCounty:      soRec.getValue({ fieldId: 'billcountry' }) || '',
+        CBTContact:     soRec.getValue({ fieldId: 'billattention' }) || '',
+        CBTVoicePhone:  soRec.getValue({ fieldId: 'billphone' }) || '',
+        CBTEmail:       soRec.getValue({ fieldId: 'custbody_cde_billto_email' }) || '',
+
+        CustomerShipTo: soRec.getValue({ fieldId: 'shipto' }) || '',
+        CSTCompanyName: soRec.getValue({ fieldId: 'shipaddressee' }) || '',
+        CSTAddress1:    soRec.getValue({ fieldId: 'shipaddr1' }) || '',
+        CSTAddress2:    soRec.getValue({ fieldId: 'shipaddr2' }) || '',
+        CSTAddress3:    soRec.getValue({ fieldId: 'shipaddr3' }) || '',
+        CSTZipCode:     soRec.getValue({ fieldId: 'shipzip' }) || '',
+        CSTCity:        soRec.getValue({ fieldId: 'shipcity' }) || '',
+        CSTState:       soRec.getValue({ fieldId: 'shipstate' }) || '',
+        CSTCountry:     soRec.getValue({ fieldId: 'shipcountry' }) || '',
+        CSTContact:     soRec.getValue({ fieldId: 'shipattention' }) || '',
+        CSTVoicePhone:  soRec.getValue({ fieldId: 'shipphone' }) || '',
+        CSTEmail:       soRec.getValue({ fieldId: 'custbody_cde_shipto_email' }) || '',
+
+        Carrier:        soRec.getText({ fieldId: 'shipcarrier' }) || '',
+        ShippingMethod: soRec.getText({ fieldId: 'shipmethod' }) || '',
+        Commentaire:    soRec.getValue({ fieldId: 'memo' }) || ''
+    };
+
+    for (var i = 0; i < lineCount; i++) {
+        var itemId = soRec.getSublistValue({
+            sublistId: 'item',
+            fieldId: 'item',
+            line: i
+        });
+        var itemType = soRec.getSublistValue({
+            sublistId: 'item',
+            fieldId: 'itemtype',
+            line: i
+        });
+        var qty = soRec.getSublistValue({
+            sublistId: 'item',
+            fieldId: 'quantity',
+            line: i
         });
 
-        for (var i = 0; i < lineCount; i++) {
-            var itemId = soRec.getSublistValue({
+        log.debug('SO line analysis', {
+            soId: soId,
+            line: i,
+            itemId: itemId,
+            itemType: itemType,
+            quantity: qty
+        });
+
+        // On ignore uniquement les lignes sans item (vraies "blank" / commentaires)
+        if (!itemId) {
+            continue;
+        }
+
+        var lineNumber = soRec.getSublistValue({
+            sublistId: 'item',
+            fieldId: 'line',
+            line: i
+        });
+
+        var itemDisplay = soRec.getSublistValue({
+            sublistId: 'item',
+            fieldId: 'item_display',
+            line: i
+        });
+
+        var lineMemo = soRec.getSublistValue({
+            sublistId: 'item',
+            fieldId: 'description',
+            line: i
+        });
+
+        var uom = soRec.getSublistText({
+            sublistId: 'item',
+            fieldId: 'unit',
+            line: i
+        });
+
+        var kitFlag = '0';
+        if (itemType === 'Kit') {
+            kitFlag = '2'; // kit parent (on affinera si besoin)
+        }
+
+        var invDetail = null;
+        try {
+            invDetail = soRec.getSublistSubrecord({
                 sublistId: 'item',
-                fieldId: 'item',
+                fieldId: 'inventorydetail',
                 line: i
             });
+        } catch (e) {
+            invDetail = null;
+        }
 
-            if (!itemId) {
-                continue;
-            }
+        // CAS 1 : lot / sérialisé → plusieurs lignes par lot
+        if (invDetail) {
+            var assCount = invDetail.getLineCount({ sublistId: 'inventoryassignment' });
 
-            var itemType = soRec.getSublistValue({
-                sublistId: 'item',
-                fieldId: 'itemtype',
-                line: i
-            });
-
-            var lineNumber = soRec.getSublistValue({
-                sublistId: 'item',
-                fieldId: 'line',
-                line: i
-            });
-
-            var itemDisplay = soRec.getSublistValue({
-                sublistId: 'item',
-                fieldId: 'item_display',
-                line: i
-            });
-
-            var quantity = soRec.getSublistValue({
-                sublistId: 'item',
-                fieldId: 'quantity',
-                line: i
-            });
-
-            var lineMemo = soRec.getSublistValue({
-                sublistId: 'item',
-                fieldId: 'description',
-                line: i
-            });
-
-            var uom = soRec.getSublistText({
-                sublistId: 'item',
-                fieldId: 'unit',
-                line: i
-            });
-
-            // Kit / composant : mapping simple (à raffiner si besoin)
-            var kitFlag = '0';
-            if (itemType === 'Kit') {
-                kitFlag = '2'; // ligne kit
-            }
-            // si un jour tu veux détecter les composants de kit → passer à '1'
-
-            // Tentative de lire le subrecord d'inventaire pour éclater par lot
-            var invDetail;
-            try {
-                invDetail = soRec.getSublistSubrecord({
-                    sublistId: 'item',
-                    fieldId: 'inventorydetail',
-                    line: i
+            for (var j = 0; j < assCount; j++) {
+                var lotNumber = invDetail.getSublistText({
+                    sublistId: 'inventoryassignment',
+                    fieldId: 'issueinventorynumber',
+                    line: j
                 });
-            } catch (e) {
-                invDetail = null;
-            }
 
-            if (invDetail) {
-                var assCount = invDetail.getLineCount({ sublistId: 'inventoryassignment' });
-                for (var j = 0; j < assCount; j++) {
-                    var lotNumber = invDetail.getSublistText({
-                        sublistId: 'inventoryassignment',
-                        fieldId: 'issueinventorynumber',
-                        line: j
-                    });
+                var lotQty = invDetail.getSublistValue({
+                    sublistId: 'inventoryassignment',
+                    fieldId: 'quantity',
+                    line: j
+                });
 
-                    var lotQty = invDetail.getSublistValue({
-                        sublistId: 'inventoryassignment',
-                        fieldId: 'quantity',
-                        line: j
-                    });
-
-                    var lineData = {
-                        LineNumber:        lineNumber,
-                        ItemNumber:        itemDisplay,
-                        OrderedQuantity:   lotQty,
-                        Comment:           lineMemo,
-                        Enseigne:          headerData.Owner, // souvent = code propriétaire
-                        KitouComposant:    kitFlag,
-                        KitItemNumber:     '',     // à renseigner si besoin
-                        KitLineNumber:     '',     // à renseigner si besoin
-                        NbParKit:          '',     // à renseigner si besoin
-                        PointRelais:       '',     // à mapper si tu l'as
-                        Zone:              soRec.getValue({ fieldId: 'custbody_cde_zone_erp' }) || '',
-                        UnitOfMeasure:     uom,
-                        LotNumber:         lotNumber,   // Numéro de Lot
-                        UV:                uom,
-                        LineNumberERP:     lineNumber   // ou un autre field custom si besoin
-                    };
-
-                    var csvLine = buildSOExportLine(headerCols, headerData, lineData, sep);
-                    lines.push(csvLine);
-                }
-            } else {
-                // Pas de détail de lot : une seule ligne par ligne de commande
-                var lineDataSingle = {
+                var lineData = {
                     LineNumber:        lineNumber,
                     ItemNumber:        itemDisplay,
-                    OrderedQuantity:   quantity,
+                    OrderedQuantity:   lotQty,
                     Comment:           lineMemo,
                     Enseigne:          headerData.Owner,
                     KitouComposant:    kitFlag,
@@ -397,31 +378,47 @@ define([
                     PointRelais:       '',
                     Zone:              soRec.getValue({ fieldId: 'custbody_cde_zone_erp' }) || '',
                     UnitOfMeasure:     uom,
-                    LotNumber:         '',
+                    LotNumber:         lotNumber,
                     UV:                uom,
                     LineNumberERP:     lineNumber
                 };
 
-                log.debug('SO line analysis', {
-                    soId: soRec.id,
-                    line: i,
-                    itemId: itemId,
-                    itemType: itemType,
-                    quantity: qty
-                });
-
-                var csvLineSingle = buildSOExportLine(headerCols, headerData, lineDataSingle, sep);
-                lines.push(csvLineSingle);
+                var csvLine = buildSOExportLine(headerCols, headerData, lineData, sep);
+                lines.push(csvLine);
             }
+        } else {
+            // CAS 2 : pas de détail de lot → une ligne par ligne article
+            var lineDataSingle = {
+                LineNumber:        lineNumber,
+                ItemNumber:        itemDisplay,
+                OrderedQuantity:   qty,
+                Comment:           lineMemo,
+                Enseigne:          headerData.Owner,
+                KitouComposant:    kitFlag,
+                KitItemNumber:     '',
+                KitLineNumber:     '',
+                NbParKit:          '',
+                PointRelais:       '',
+                Zone:              soRec.getValue({ fieldId: 'custbody_cde_zone_erp' }) || '',
+                UnitOfMeasure:     uom,
+                LotNumber:         '',
+                UV:                uom,
+                LineNumberERP:     lineNumber
+            };
+
+            var csvLineSingle = buildSOExportLine(headerCols, headerData, lineDataSingle, sep);
+            lines.push(csvLineSingle);
         }
-
-        log.debug('SO export lines built', {
-            soId: soRec.id,
-            exportedLines: lines.length
-        });
-
-        return lines;
     }
+
+    log.debug('SO export lines built', {
+        soId: soId,
+        exportedLines: lines.length
+    });
+
+    return lines;
+}
+
 
     /**
      * Construit une ligne CSV en combinant :
