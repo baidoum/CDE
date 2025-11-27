@@ -2,8 +2,8 @@
  * @NApiVersion 2.1
  * @NModuleScope SameAccount
  */
-define(['N/sftp', 'N/file', 'N/log', 'N/config','./CDE_WMS_QueueUtil'], 
-function (sftp, file, log, config, QueueUtil) {
+define(['N/record', 'N/sftp', 'N/file', 'N/log', 'N/config','./CDE_WMS_QueueUtil'], 
+function (record, sftp, file, log, config, QueueUtil) {
 
     /**
      * Chargement des préférences WMS depuis Company Preferences
