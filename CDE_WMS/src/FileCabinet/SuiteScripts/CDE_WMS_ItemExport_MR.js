@@ -160,68 +160,21 @@ define([
       return;
     }
 
-try {
-  const fileObj = file.create({
-    name: fileName,
-    fileType: file.Type.CSV,
-    contents: fileContent,
-    folder: parseInt(folderId, 10)
-  });
 
-  const fileId = fileObj.save();
 
-  log.audit('REDUCE - file created', {
-    fileId,
-    fileName,
-    folderId,
-    lines: lines.length - 1
-  });
+var res = SFTPUtil.exportFileAndSend({
+  fileName: fileName,
+  fileContent: fileContent,
+  folderId: folderId,
+  queueIdsDone: queueIdsDone,
+  queueIdsError: queueIdsError,
+  logPrefix: 'ITEM EXPORT',          // ou 'SO EXPORT', 'PO EXPORT'
+  fileType: file.Type.CSV            // ou PLAINTEXT si besoin
+});
 
-  // ==== Upload SFTP ====
-  log.audit('REDUCE - SFTP upload start', { fileId, fileName });
-
-  var uploadRes = SFTPUtil.uploadFile({
-    fileId: fileId
-  });
-
-  if (!uploadRes || !uploadRes.success) {
-    var errMsg = (uploadRes && uploadRes.message) || 'SFTP upload failed (résultat vide)';
-    log.error('REDUCE - SFTP upload error', errMsg);
-
-    // Toutes les queues concernées passent en ERROR
-    queueIdsDone.concat(queueIdsError).forEach(function (id) {
-      markQueueStatus(id, QueueUtil.STATUS.ERROR, 'SFTP: ' + errMsg);
-    });
-    return; // on arrête la reduce ici
-  }
-
-  log.audit('REDUCE - SFTP upload success', uploadRes.message || 'OK');
-
-  // ==== MàJ de la queue en cas de succès SFTP ====
-  queueIdsDone.forEach(function (id) {
-    // statut = SENT (fichier généré + envoyé)
-    markQueueStatus(id, QueueUtil.STATUS.SENT);
-    // on stocke le fichier dans le champ document de la queue
-    linkQueueToFile(id, fileId);
-  });
-
-  // Les queues déjà en erreur restent en ERROR
-  queueIdsError.forEach(function (id) {
-    markQueueStatus(id, QueueUtil.STATUS.ERROR);
-  });
-
-} catch (eFile) {
-  log.error('REDUCE - file save / SFTP error', {
-    error: eFile.message,
-    stack: eFile.stack
-  });
-
-  var errMsg = eFile.message || String(eFile);
-
-  // Toute la grappe de queues passe en ERROR
-  queueIdsDone.concat(queueIdsError).forEach(function (id) {
-    markQueueStatus(id, QueueUtil.STATUS.ERROR, errMsg);
-  });
+if (!res.success) {
+  log.error('REDUCE - export error', res.message);
+  return;
 }
 
   }
@@ -250,29 +203,6 @@ try {
     log.audit('SUMMARIZE end', 'OK');
   }
 
-  // ---------- Helpers ----------
-
-  function linkQueueToFile(queueId, fileId) {
-    try {
-        record.submitFields({
-            type: 'customrecord_cde_item_sync_queue',
-            id: queueId,
-            values: {
-                custrecord_sync_file: fileId
-            },
-            options: {
-                enableSourcing: false,
-                ignoreMandatoryFields: true
-            }
-        });
-    } catch (e) {
-        log.error('linkQueueToFile - ERROR', {
-            queueId: queueId,
-            fileId: fileId,
-            error: e.message
-        });
-    }
-}
 
 
   function markQueueStatus(queueId, statusValue, errorMsg) {

@@ -2,8 +2,8 @@
  * @NApiVersion 2.1
  * @NModuleScope SameAccount
  */
-define(['N/sftp', 'N/file', 'N/log', 'N/config'], 
-function (sftp, file, log, config) {
+define(['N/sftp', 'N/file', 'N/log', 'N/config','./CDE_WMS_QueueUtil'], 
+function (sftp, file, log, config, QueueUtil) {
 
     /**
      * Chargement des préférences WMS depuis Company Preferences
@@ -130,8 +130,121 @@ function (sftp, file, log, config) {
         }
     }
 
+    
+    function markQueueStatus(queueId, statusId, errorMsg) {
+        var values = { custrecord_sync_status: statusId };
+        if (errorMsg) {
+            values.custrecord_sync_error = String(errorMsg).substring(0, 300);
+        }
+
+        record.submitFields({
+            type: 'customrecord_cde_item_sync_queue',
+            id: queueId,
+            values: values,
+            options: { enableSourcing: false, ignoreMandatoryFields: true }
+        });
+    }
+
+    
+    // -------- Fonction haut niveau : création fichier + upload + MAJ queue --------
+    /**
+     * @param {Object} opts
+     * @param {string} opts.fileName
+     * @param {string} opts.fileContent
+     * @param {number|string} opts.folderId
+     * @param {Array<string|number>} opts.queueIdsDone
+     * @param {Array<string|number>} opts.queueIdsError
+     * @param {string} [opts.logPrefix]    ex: 'ITEM EXPORT', 'SO EXPORT'
+     * @param {string} [opts.fileType]     ex: file.Type.CSV, file.Type.PLAINTEXT
+     */
+    function exportFileAndSend(opts) {
+        var fileName      = opts.fileName;
+        var fileContent   = opts.fileContent;
+        var folderId      = parseInt(opts.folderId, 10);
+        var queueIdsDone  = opts.queueIdsDone || [];
+        var queueIdsError = opts.queueIdsError || [];
+        var logPrefix     = opts.logPrefix || 'EXPORT';
+        var fileType      = opts.fileType || file.Type.CSV;
+
+        try {
+            // 1) Création du fichier
+            var fileObj = file.create({
+                name: fileName,
+                fileType: fileType,
+                contents: fileContent,
+                folder: folderId
+            });
+
+            var fileId = fileObj.save();
+
+            log.audit(logPrefix + ' - file created', {
+                fileId: fileId,
+                fileName: fileName,
+                folderId: folderId
+            });
+
+            // 2) Upload SFTP
+            log.audit(logPrefix + ' - SFTP upload start', { fileId: fileId, fileName: fileName });
+
+            var uploadRes = uploadFile({ fileId: fileId });
+
+            if (!uploadRes || !uploadRes.success) {
+                var errMsg = (uploadRes && uploadRes.message) || 'SFTP upload failed (résultat vide)';
+                log.error(logPrefix + ' - SFTP upload error', errMsg);
+
+                queueIdsDone.concat(queueIdsError).forEach(function (id) {
+                    markQueueStatus(id, QueueUtil.STATUS.ERROR, 'SFTP: ' + errMsg);
+                });
+
+                return { success: false, message: errMsg };
+            }
+
+            log.audit(logPrefix + ' - SFTP upload success', uploadRes.message || 'OK');
+
+            // 3) MAJ des queues
+            queueIdsDone.forEach(function (id) {
+                markQueueStatus(id, QueueUtil.STATUS.SENT);
+                linkQueueToFile(id, fileId);
+            });
+
+            queueIdsError.forEach(function (id) {
+                markQueueStatus(id, QueueUtil.STATUS.ERROR);
+            });
+
+            return {
+                success: true,
+                fileId: fileId,
+                message: uploadRes.message || 'OK'
+            };
+
+        } catch (eFile) {
+            log.error(logPrefix + ' - file save / SFTP error', {
+                error: eFile.message,
+                stack: eFile.stack
+            });
+
+            var errMsg = eFile.message || String(eFile);
+
+            queueIdsDone.concat(queueIdsError).forEach(function (id) {
+                markQueueStatus(id, QueueUtil.STATUS.ERROR, errMsg);
+            });
+
+            return { success: false, message: errMsg };
+        }
+    }
+
+    function linkQueueToFile(queueId, fileId) {
+        record.submitFields({
+            type: 'customrecord_cde_item_sync_queue',
+            id: queueId,
+            values: { custrecord_sync_file: fileId },
+            options: { enableSourcing: false, ignoreMandatoryFields: true }
+        });
+    }
+
     return {
         getWmsPrefs: getWmsPrefs,
-        uploadFile: uploadFile
+        uploadFile: uploadFile,
+        exportFileAndSend: exportFileAndSend
     };
 });

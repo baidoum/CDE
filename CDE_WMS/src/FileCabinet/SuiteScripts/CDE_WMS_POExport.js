@@ -18,8 +18,10 @@ define([
     'N/log',
     'N/file',
     './CDE_WMS_QueueUtil',
-    './CDE_WMS_FileHeader'
-], function (search, record, runtime, log, file, QueueUtil, FileHeader) {
+    './CDE_WMS_FileHeader',
+    './CDE_WMS_SFTPUtil'   
+
+], function (search, record, runtime, log, file, QueueUtil, FileHeader,SFTPUtil) {
 
     function getInputData() {
         log.audit('POExportMR.getInputData', 'Start');
@@ -160,38 +162,21 @@ define([
             return;
         }
 
-        try {
-            var fileObj = file.create({
-                name: fileName,
-                fileType: file.Type.PLAINTEXT,
-                contents: fileContent,
-                folder: parseInt(folderId, 10)
-            });
+var res = SFTPUtil.exportFileAndSend({
+  fileName: fileName,
+  fileContent: fileContent,
+  folderId: folderId,
+  queueIdsDone: queueIdsDone,
+  queueIdsError: queueIdsError,
+  logPrefix: 'PO EXPORT',          // ou 'SO EXPORT', 'PO EXPORT'
+  fileType: file.Type.CSV            // ou PLAINTEXT si besoin
+});
 
-            var fileId = fileObj.save();
+if (!res.success) {
+  log.error('REDUCE - export error', res.message);
+  return;
+}
 
-            log.audit('REDUCE - file created', {
-                fileId: fileId,
-                fileName: fileName,
-                folderId: folderId,
-                lines: lines.length - 1
-            });
-
-            // Lier le fichier + statut DONE
-            queueIdsDone.forEach(function (id) {
-                markQueueStatus(id, QueueUtil.STATUS.DONE, null);
-                linkQueueToFile(id, fileId);
-            });
-
-            // Ceux en erreur ont déjà reçu un message explicite dans markQueueStatus
-
-        } catch (eFile) {
-            log.error('REDUCE - file save error', { error: eFile.message, stack: eFile.stack });
-            var errMsgFile = 'File save: ' + eFile.message;
-            queueIdsDone.concat(queueIdsError).forEach(function (id) {
-                markQueueStatus(id, QueueUtil.STATUS.ERROR, errMsgFile);
-            });
-        }
     }
 
     function summarize(summary) {
