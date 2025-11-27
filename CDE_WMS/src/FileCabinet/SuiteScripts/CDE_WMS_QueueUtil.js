@@ -28,7 +28,8 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
     Ready:      '2',
     InProgress: '3',
     Done:       '4',
-    Error:      '5'
+    Error:      '5',
+    Sent:       '6'
   };
 
   /**
@@ -46,7 +47,9 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
     READY:       STATUS_MAP.Ready,
     IN_PROGRESS: STATUS_MAP.InProgress,
     DONE:        STATUS_MAP.Done,
-    ERROR:       STATUS_MAP.Error
+    ERROR:       STATUS_MAP.Error,
+    SENT:        STATUS_MAP.Sent
+
   };
 
   const TOPIC = {

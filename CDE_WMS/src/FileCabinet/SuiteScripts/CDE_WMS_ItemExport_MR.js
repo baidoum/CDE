@@ -10,7 +10,8 @@ define([
   'N/log',
   'N/file',
   './CDE_WMS_QueueUtil',
-  './CDE_WMS_FileHeader'
+  './CDE_WMS_FileHeader',
+  './CDE_WMS_SFTPUtil' 
 ], (search, record, runtime, log, file, QueueUtil, FileHeader) => {
 
 
@@ -158,34 +159,70 @@ define([
       return;
     }
 
-    try {
-      const fileObj = file.create({
-        name: fileName,
-        fileType: file.Type.CSV,
-        contents: fileContent,
-        folder: parseInt(folderId, 10)
-      });
+try {
+  const fileObj = file.create({
+    name: fileName,
+    fileType: file.Type.CSV,
+    contents: fileContent,
+    folder: parseInt(folderId, 10)
+  });
 
-      const fileId = fileObj.save();
+  const fileId = fileObj.save();
 
-      log.audit('REDUCE - file created', {
-        fileId,
-        fileName,
-        folderId,
-        lines: lines.length - 1
-      });
+  log.audit('REDUCE - file created', {
+    fileId,
+    fileName,
+    folderId,
+    lines: lines.length - 1
+  });
 
-      queueIdsDone.forEach(function (id) {
-        markQueueStatus(id, QueueUtil.STATUS.DONE);
-        linkQueueToFile(id, fileId);
-      });
-      queueIdsError.forEach((id) => markQueueStatus(id, QueueUtil.STATUS.ERROR));
+  // ==== Upload SFTP ====
+  log.audit('REDUCE - SFTP upload start', { fileId, fileName });
 
-    } catch (eFile) {
-      log.error('REDUCE - file save error', { error: eFile.message, stack: eFile.stack });
-      queueIdsDone.concat(queueIdsError).forEach((id) => markQueueStatus(id, QueueUtil.STATUS.ERROR));
-      markQueueStatus(id, QueueUtil.STATUS.ERROR, errMsg);
-    }
+  var uploadRes = SFTPUtil.uploadFile({
+    fileId: fileId
+  });
+
+  if (!uploadRes || !uploadRes.success) {
+    var errMsg = (uploadRes && uploadRes.message) || 'SFTP upload failed (résultat vide)';
+    log.error('REDUCE - SFTP upload error', errMsg);
+
+    // Toutes les queues concernées passent en ERROR
+    queueIdsDone.concat(queueIdsError).forEach(function (id) {
+      markQueueStatus(id, QueueUtil.STATUS.ERROR, 'SFTP: ' + errMsg);
+    });
+    return; // on arrête la reduce ici
+  }
+
+  log.audit('REDUCE - SFTP upload success', uploadRes.message || 'OK');
+
+  // ==== MàJ de la queue en cas de succès SFTP ====
+  queueIdsDone.forEach(function (id) {
+    // statut = SENT (fichier généré + envoyé)
+    markQueueStatus(id, QueueUtil.STATUS.SENT);
+    // on stocke le fichier dans le champ document de la queue
+    linkQueueToFile(id, fileId);
+  });
+
+  // Les queues déjà en erreur restent en ERROR
+  queueIdsError.forEach(function (id) {
+    markQueueStatus(id, QueueUtil.STATUS.ERROR);
+  });
+
+} catch (eFile) {
+  log.error('REDUCE - file save / SFTP error', {
+    error: eFile.message,
+    stack: eFile.stack
+  });
+
+  var errMsg = eFile.message || String(eFile);
+
+  // Toute la grappe de queues passe en ERROR
+  queueIdsDone.concat(queueIdsError).forEach(function (id) {
+    markQueueStatus(id, QueueUtil.STATUS.ERROR, errMsg);
+  });
+}
+
   }
 
   function summarize(summary) {
