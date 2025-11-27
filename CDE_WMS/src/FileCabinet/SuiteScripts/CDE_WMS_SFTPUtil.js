@@ -2,63 +2,115 @@
  * @NApiVersion 2.1
  * @NModuleScope SameAccount
  */
-define(['N/sftp', 'N/file', 'N/log', 'N/runtime'], function (sftp, file, log, runtime) {
+define(['N/sftp', 'N/file', 'N/log', 'N/config'], 
+function (sftp, file, log, config) {
 
     /**
-     * Upload d'un fichier du File Cabinet vers un SFTP.
-     *
-     * @param {Object} options
-     * @param {number|string} options.fileId       - ID du fichier NetSuite
-     * @param {string} [options.directory]         - Dossier distant (/IN par défaut)
-     * @returns {{success: boolean, message: string}}
+     * Chargement des préférences WMS depuis Company Preferences
+     */
+    function getWmsPrefs() {
+        log.audit('WMS PREFS', 'Chargement des préférences via COMPANY_PREFERENCES...');
+
+        var prefs = config.load({
+            type: config.Type.COMPANY_PREFERENCES
+        });
+
+        var result = {
+            host:      prefs.getValue('custscript_wms_sftp_host'),
+            port:      prefs.getValue('custscript_wms_sftp_port'),
+            username:  prefs.getValue('custscript_wms_sftp_username'),
+            secretId:  prefs.getValue('custscript_wms_sftp_secret_id'),
+            hostKey:   prefs.getValue('custscript_wms_sftp_hostkey'),
+            directory: prefs.getValue('custscript_wms_sftp_directory'),
+            ownerCode: prefs.getValue('custscript_wms_owner_code')
+        };
+
+        // LOG DÉTAILLÉ
+        log.debug('WMS PREFS (RAW)', result);
+
+        // Vérification des valeurs manquantes
+        var missing = [];
+        Object.keys(result).forEach(function (k) {
+            if (!result[k]) missing.push(k);
+        });
+
+        if (missing.length > 0) {
+            log.error('WMS PREFS - CHAMPS MANQUANTS', 
+                'Les préférences suivantes sont vides: ' + missing.join(', ')
+            );
+        } else {
+            log.audit('WMS PREFS', 'Toutes les préférences sont correctement renseignées.');
+        }
+
+        return result;
+    }
+
+    /**
+     * Upload d’un fichier vers SFTP
      */
     function uploadFile(options) {
-        var fileId    = options.fileId;
-        var directory = options.directory || '/IN';
+        var fileId = options && options.fileId;
+        var overrideDir = options && options.directory;
 
         if (!fileId) {
-            return { success: false, message: 'fileId manquant' };
+            return { success: false, message: 'fileId manquant pour l’upload SFTP' };
+        }
+
+        // Lecture des préférences
+        var wms = getWmsPrefs();
+
+        // Log de synthèse avant tentative de connexion
+        log.audit('SFTP Upload INIT', {
+            host: wms.host,
+            port: wms.port,
+            username: wms.username,
+            secretId: wms.secretId,
+            directory: overrideDir || wms.directory
+        });
+
+        if (!wms.host || !wms.username || !wms.secretId) {
+            var msg = 'Préférences SFTP incomplètes. Vérifie host, username, secretId.';
+            log.error('SFTP Upload ABORT', msg);
+            return { success: false, message: msg };
         }
 
         try {
-            var script = runtime.getCurrentScript();
-
-            // ⚙️ Idéalement : tout vient de paramètres de script
-            var username = script.getParameter({ name: 'custscript_cde_sftp_username' });
-            var secretId = script.getParameter({ name: 'custscript_cde_sftp_secret' });
-            var url      = script.getParameter({ name: 'custscript_cde_sftp_url' });
-            var port     = script.getParameter({ name: 'custscript_cde_sftp_port' });
-            var hostKey  = script.getParameter({ name: 'custscript_cde_sftp_hostkey' });
-
-            // En fallback, tu peux temporairement garder des valeurs en dur (mais à éviter) :
-            // username = username || 'SifLegrandgrp';
-            // secretId = secretId || 'custsecret_sftp_hillebrand_pwd_prod';
-            // url      = url      || 'SFTP.Hillebrand.com';
-            // port     = port     || 2222;
-            // hostKey  = hostKey  || 'AAAAB3NzaC1yc2EAAAADAQABAAAAgQDD...';
-
             var fileObj  = file.load({ id: fileId });
             var fileName = fileObj.name;
 
-            log.debug('SFTP Upload - file', { fileId: fileId, fileName: fileName });
-
-            var conn = sftp.createConnection({
-                username: username,
-                secret:   secretId,
-                url:      url,
-                port:     parseInt(port || 22, 10),
-                directory: directory,
-                hostKey:  hostKey
+            log.debug('SFTP Upload - File loaded', {
+                fileId: fileId,
+                fileName: fileName
             });
 
-            log.debug('SFTP Upload - connection OK', { url: url, directory: directory });
+            // Tentative de connexion
+            log.audit('SFTP CONNECT', {
+                host: wms.host,
+                port: wms.port,
+                directory: overrideDir || wms.directory
+            });
 
+            var conn = sftp.createConnection({
+                username:  wms.username,
+                secret:    wms.secretId,
+                url:       wms.host,
+                port:      parseInt(wms.port || 22, 10),
+                directory: overrideDir || wms.directory,
+                hostKey:   wms.hostKey
+            });
+
+            log.audit('SFTP CONNECT SUCCESS', {
+                host: wms.host,
+                directory: overrideDir || wms.directory
+            });
+
+            // Upload
             conn.upload({
                 filename: fileName,
                 file: fileObj
             });
 
-            log.debug('SFTP Upload', 'Upload OK pour ' + fileName);
+            log.audit('SFTP Upload SUCCESS', fileName);
 
             return {
                 success: true,
@@ -66,7 +118,11 @@ define(['N/sftp', 'N/file', 'N/log', 'N/runtime'], function (sftp, file, log, ru
             };
 
         } catch (e) {
-            log.error('SFTP Upload FAILED', 'Erreur : ' + e.name + ' - ' + e.message);
+            log.error('SFTP Upload FAILED', {
+                name: e.name,
+                message: e.message,
+                stack: e.stack
+            });
             return {
                 success: false,
                 message: e.message || String(e)
@@ -75,6 +131,7 @@ define(['N/sftp', 'N/file', 'N/log', 'N/runtime'], function (sftp, file, log, ru
     }
 
     return {
+        getWmsPrefs: getWmsPrefs,
         uploadFile: uploadFile
     };
 });
