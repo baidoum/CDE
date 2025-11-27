@@ -45,8 +45,7 @@ define([
             var values = result.values || {};
             var queueId = result.id;
 
-            var poField    = values.custrecord_cde_sync_purch_order;
-            
+           
             var recordIdTx = values.custrecord_sync_record_id;
             var recordType = values.custrecord_sync_record_type;
 
