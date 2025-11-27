@@ -12,7 +12,8 @@ define([
   './CDE_WMS_QueueUtil',
   './CDE_WMS_FileHeader',
   './CDE_WMS_SFTPUtil' 
-], (search, record, runtime, log, file, QueueUtil, FileHeader) => {
+
+], (search, record, runtime, log, file, QueueUtil, FileHeader, SFTPUtil ) => {
 
 
   function getInputData() {
