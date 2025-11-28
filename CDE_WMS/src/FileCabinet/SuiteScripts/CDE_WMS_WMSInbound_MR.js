@@ -89,12 +89,12 @@ define([
         var files = entries
             .filter(function (entry) {
                 return !entry.directory &&
-                       entry.filename !== '.' &&
-                       entry.filename !== '..';
+                       entry.name !== '.' &&
+                       entry.name !== '..';
             })
             .map(function (entry) {
                 return {
-                    filename: entry.filename,
+                    name: entry.name,
                     directory: remoteDir,
                     size: entry.size
                 };
@@ -114,7 +114,7 @@ define([
      */
     function map(context) {
         var data = JSON.parse(context.value);
-        var filename  = data.filename;
+        var filename  = data.name;
         var directory = data.directory;
 
         log.audit('WMS INBOUND - MAP start', {
