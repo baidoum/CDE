@@ -31,7 +31,7 @@ define([
             username:  prefs.username,
             secret:    prefs.secretId,               // ID du secret (custsecret_...)
             url:       prefs.host,
-            port:      prefs.port,
+            port:      parseInt(prefs.port || 22, 10),
             directory: prefs.inboundDirectory,       // directory “par défaut” pour la connexion
             hostKey:   prefs.hostKey
         });
