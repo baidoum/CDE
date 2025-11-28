@@ -22,7 +22,9 @@ function (record, sftp, file, log, config, QueueUtil) {
             secretId:  prefs.getValue('custscript_wms_sftp_secret_id'),
             hostKey:   prefs.getValue('custscript_wms_sftp_hostkey'),
             directory: prefs.getValue('custscript_wms_sftp_directory'),
-            ownerCode: prefs.getValue('custscript_wms_owner_code')
+            ownerCode: prefs.getValue('custscript_wms_owner_code'),
+            inboundDirectory: prefs.getValue('custscript_wms_sftp_inbound_dir'),
+
         };
 
         // LOG DÉTAILLÉ
