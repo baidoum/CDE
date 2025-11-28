@@ -54,11 +54,11 @@ define([
         var script = runtime.getCurrentScript();
 
         // Param optionnel pour surcharger le répertoire SFTP (sinon valeur par défaut)
-        var remoteDir = script.getParameter({
-            name: 'custscript_wms_in_remote_dir'
-        }) || '/home/AXELIStoLCDE';
+        
 
         var conn = getSftpConnection();
+
+        var remoteDir = conn.inboundDirectory
 
         // Liste des fichiers dans le répertoire
         var entries;
