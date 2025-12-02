@@ -214,12 +214,12 @@ define([
 
             inboundRec.setValue({
                 fieldId: 'custrecord_wms_in_file_name',
-                value: fileName
+                value: filename
             });
 
             inboundRec.setValue({
                 fieldId: 'custrecord_wms_in_file',
-                value: savedFileId
+                value: fileId
             });
 
             // Statut initial = NEW
