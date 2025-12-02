@@ -213,7 +213,7 @@ define([
             });
 
             inboundRec.setValue({
-                fieldId: 'custrecord_wms_in_file_name',
+                fieldId: 'name',
                 value: filename
             });
 
