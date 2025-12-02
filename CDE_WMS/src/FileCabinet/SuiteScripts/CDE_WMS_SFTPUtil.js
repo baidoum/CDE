@@ -244,9 +244,59 @@ function (record, sftp, file, log, config, QueueUtil) {
         });
     }
 
+    function archiveInboundFile(options) {
+    var fileId    = options && options.fileId;
+    var logPrefix = options && options.logPrefix || 'WMS INBOUND ARCHIVE';
+
+    if (!fileId) {
+        log.error(logPrefix, 'archiveInboundFile: fileId manquant');
+        return { success: false, message: 'fileId manquant' };
+    }
+
+    var prefs = getWmsPrefs();
+    var archiveFolder = prefs.inboundArchiveFolder;
+
+    if (!archiveFolder) {
+        var msg = 'Aucun dossier d’archive inbound défini (custscript_wms_inbound_archive_folder).';
+        log.error(logPrefix, msg);
+        return { success: false, message: msg };
+    }
+
+    try {
+        var f = file.load({ id: fileId });
+
+        log.debug(logPrefix + ' - before move', {
+            fileId: fileId,
+            currentFolder: f.folder,
+            archiveFolder: archiveFolder
+        });
+
+        f.folder = parseInt(archiveFolder, 10);
+        var newId = f.save();
+
+        log.audit(logPrefix + ' - file archived', {
+            oldId: fileId,
+            newId: newId,
+            archiveFolder: archiveFolder
+        });
+
+        return { success: true, fileId: newId };
+
+    } catch (e) {
+        log.error(logPrefix + ' - archive error', {
+            fileId: fileId,
+            error: e.message,
+            stack: e.stack
+        });
+        return { success: false, message: e.message || String(e) };
+    }
+}
+
+
     return {
         getWmsPrefs: getWmsPrefs,
         uploadFile: uploadFile,
-        exportFileAndSend: exportFileAndSend
+        exportFileAndSend: exportFileAndSend,
+        archiveInboundFile: archiveInboundFile
     };
 });

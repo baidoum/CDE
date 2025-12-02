@@ -64,10 +64,10 @@ define([
         var upper = fileName.toUpperCase();
 
         // Exemple de conventions possibles : PREP_..., PREPA_..., RECP_..., RECEP_...
-        if (upper.indexOf('PREP') === 0 || upper.indexOf('PREPA') === 0) {
+        if (upper.includes('PREP')) {
             return TOPIC.PREPARATION_RETURN;
         }
-        if (upper.indexOf('RECP') === 0 || upper.indexOf('RECEP') === 0) {
+        if (upper.includes('RECEP')) {
             return TOPIC.RECEPTION_RETURN;
         }
 
