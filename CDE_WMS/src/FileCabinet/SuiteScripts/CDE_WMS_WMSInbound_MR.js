@@ -11,6 +11,20 @@ define([
     './CDE_WMS_SFTPUtil'
 ], function (runtime, log, sftp, file, SFTPUtil) {
 
+        var REC_INBOUND = 'customrecord_cde_wms_inbound_file';
+
+    var STATUS = {
+        NEW: '1',
+        PROCESSING: '2',
+        DONE: '3',
+        ERROR: '4'
+    };
+
+    var TOPIC = {
+        PREPARATION_RETURN: '1',
+        RECEPTION_RETURN: '2'
+    };
+
     /**
      * Crée une connexion SFTP en réutilisant les préférences WMS.
      */
@@ -41,6 +55,41 @@ define([
         });
 
         return conn;
+    }
+
+    //Topic en fonction du nom de fichier
+    function inferTopicFromFileName(fileName) {
+        if (!fileName) return null;
+        var upper = fileName.toUpperCase();
+
+        // Exemple de conventions possibles : PREP_..., PREPA_..., RECP_..., RECEP_...
+        if (upper.indexOf('PREP') === 0 || upper.indexOf('PREPA') === 0) {
+            return TOPIC.PREPARATION_RETURN;
+        }
+        if (upper.indexOf('RECP') === 0 || upper.indexOf('RECEP') === 0) {
+            return TOPIC.RECEPTION_RETURN;
+        }
+
+        // Pas reconnu → on laisse le topic vide, à ajuster manuellement si besoin
+        return null;
+    }
+
+    /**
+     * Vérifie si on a déjà un inbound file avec ce nom.
+     */
+    function inboundExists(fileName) {
+        if (!fileName) return false;
+
+        var s = search.create({
+            type: REC_INBOUND,
+            filters: [
+                ['custrecord_wms_in_file_name', 'is', fileName]
+            ],
+            columns: ['internalid']
+        });
+
+        var res = s.run().getRange({ start: 0, end: 1 });
+        return res && res.length > 0;
     }
 
     /**
@@ -155,11 +204,44 @@ define([
                 folderId: inboundFolderId
             });
 
-            // 💡 OPTION FUTURE :
-            // Ici, on pourrait :
-            //  - soit supprimer le fichier du SFTP
-            //  - soit le déplacer dans un répertoire d’archive
-            // Pour l’instant on ne touche à rien côté SFTP, pour éviter les bêtises.
+         // Création du record inbound
+
+                     var inboundRec = record.create({
+                type: REC_INBOUND,
+                isDynamic: false
+            });
+
+            inboundRec.setValue({
+                fieldId: 'custrecord_wms_in_file_name',
+                value: fileName
+            });
+
+            inboundRec.setValue({
+                fieldId: 'custrecord_wms_in_file',
+                value: savedFileId
+            });
+
+            // Statut initial = NEW
+            inboundRec.setValue({
+                fieldId: 'custrecord_wms_in_status',
+                value: STATUS.NEW
+            });
+
+            // Topic deviné à partir du nom de fichier (optionnel)
+            var topic = inferTopicFromFileName(fileName);
+            if (topic) {
+                inboundRec.setValue({
+                    fieldId: 'custrecord_wms_in_topic',
+                    value: topic
+                });
+            }
+
+            var inboundId = inboundRec.save();
+
+            log.audit('WMS INBOUND - inbound record created', {
+                inboundId: inboundId,
+                fileName: fileName
+            });
 
         } catch (e) {
             log.error('WMS INBOUND - MAP error', {
