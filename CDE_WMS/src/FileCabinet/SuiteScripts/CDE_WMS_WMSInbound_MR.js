@@ -229,7 +229,7 @@ define([
             });
 
             // Topic deviné à partir du nom de fichier (optionnel)
-            var topic = inferTopicFromFileName(fileName);
+            var topic = inferTopicFromFileName(filename);
             if (topic) {
                 inboundRec.setValue({
                     fieldId: 'custrecord_wms_in_topic',
@@ -241,7 +241,7 @@ define([
 
             log.audit('WMS INBOUND - inbound record created', {
                 inboundId: inboundId,
-                fileName: fileName
+                fileName: filename
             });
 
         } catch (e) {
