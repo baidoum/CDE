@@ -11,7 +11,7 @@ define([
     './CDE_WMS_SFTPUtil'
 ], function (runtime, log, sftp, file, SFTPUtil) {
 
-        var REC_INBOUND = 'customrecord_cde_wms_inbound_file';
+        var REC_INBOUND = 'customrecord_cde_wms_inbound';
 
     var STATUS = {
         NEW: '1',
@@ -206,7 +206,7 @@ define([
 
          // Création du record inbound
 
-                     var inboundRec = record.create({
+          var inboundRec = record.create({
                 type: REC_INBOUND,
                 isDynamic: false
             });
