@@ -8,8 +8,9 @@ define([
     'N/log',
     'N/sftp',
     'N/file',
+    'N/record',
     './CDE_WMS_SFTPUtil'
-], function (runtime, log, sftp, file, SFTPUtil) {
+], function (runtime, log, sftp, file,record, SFTPUtil) {
 
         var REC_INBOUND = 'customrecord_cde_wms_inbound';
 
