@@ -7,9 +7,10 @@
  * - Lit la file customrecord_cde_item_sync_queue (topic = SALES_ORDER, status = READY)
  * - Charge chaque Sales Order
  * - Génère une ligne par ligne de commande, et si possible une ligne par numéro de lot
- * - Crée un fichier texte (.txt) dans le File Cabinet
+ * - Crée un fichier texte (.csv) dans le File Cabinet
+ * - Envoie le fichier sur le SFTP
  * - Lie le fichier à chaque enregistrement de queue traité (champ custrecord_sync_file)
- * - Met à jour les statuts (READY → IN_PROGRESS → DONE / ERROR)
+ * - Met à jour les statuts (READY → IN_PROGRESS → SENT / ERROR)
  */
 define([
     'N/search',
@@ -19,8 +20,10 @@ define([
     'N/file',
     './CDE_WMS_QueueUtil',
     './CDE_WMS_FileHeader',
-    './CDE_WMS_SFTPUtil'  
-], function (search, record, runtime, log, file, QueueUtil, FileHeader,SFTPUtil) {
+    './CDE_WMS_SFTPUtil'
+], function (search, record, runtime, log, file, QueueUtil, FileHeader, SFTPUtil) {
+
+    // ---------------- getInputData ----------------
 
     function getInputData() {
         log.audit('SOExportMR.getInputData', 'Start');
@@ -40,6 +43,9 @@ define([
             ]
         });
     }
+
+    // ---------------- map ----------------
+    // CHANGEMENT : key = queueId (1 reduce par queue / par SO)
 
     function map(context) {
         try {
@@ -77,12 +83,14 @@ define([
                 return;
             }
 
+            // IMPORTANT : clé = queueId pour avoir 1 reduce par queue
             context.write({
-                key: QueueUtil.TOPIC.SALES_ORDER,
+                key: queueId,
                 value: JSON.stringify({
                     queueId: queueId,
                     soId: finalSoId,
-                    recordType: recordType || record.Type.SALES_ORDER
+                    recordType: recordType || record.Type.SALES_ORDER,
+                    topic: QueueUtil.TOPIC.SALES_ORDER
                 })
             });
 
@@ -91,15 +99,28 @@ define([
         }
     }
 
+    // ---------------- reduce ----------------
+    // 1 reduce = 1 queueId = 1 SO = 1 fichier
+
     function reduce(context) {
-        var topic = context.key;
-        log.audit('REDUCE start', { topic: topic });
+        var queueKey = context.key;
+        log.audit('REDUCE start', { queueKey: queueKey });
+
+        // Pour ce MR, le topic est toujours SALES_ORDER
+        var topic = QueueUtil.TOPIC.SALES_ORDER;
 
         var headerCols;
         try {
             headerCols = FileHeader.getHeaderColumns(topic);
         } catch (eHeader) {
             log.error('REDUCE - header error', { topic: topic, error: eHeader.message });
+            // si on n'a pas de header, on met la/les queues en erreur
+            context.values.forEach(function (val) {
+                try {
+                    var obj = JSON.parse(val);
+                    markQueueStatus(obj.queueId, QueueUtil.STATUS.ERROR, 'Header error: ' + eHeader.message);
+                } catch (e) {}
+            });
             return;
         }
 
@@ -109,6 +130,8 @@ define([
         var queueIdsDone = [];
         var queueIdsError = [];
 
+        // Normalement on n’a qu’une seule value par queueKey,
+        // mais on loop au cas où.
         context.values.forEach(function (value) {
             var obj;
             try {
@@ -118,8 +141,8 @@ define([
                 return;
             }
 
-            var queueId   = obj.queueId;
-            var soId      = obj.soId;
+            var queueId    = obj.queueId;
+            var soId       = obj.soId;
             var recordType = obj.recordType || record.Type.SALES_ORDER;
 
             try {
@@ -146,7 +169,7 @@ define([
         });
 
         if (lines.length <= 1) {
-            log.audit('REDUCE - no data to export', { topic: topic });
+            log.audit('REDUCE - no data to export', { queueKey: queueKey });
             return;
         }
 
@@ -163,21 +186,25 @@ define([
             return;
         }
 
-var res = SFTPUtil.exportFileAndSend({
-  fileName: fileName,
-  fileContent: fileContent,
-  folderId: folderId,
-  queueIdsDone: queueIdsDone,
-  queueIdsError: queueIdsError,
-  logPrefix: 'ITEM EXPORT',          // ou 'SO EXPORT', 'PO EXPORT'
-  fileType: file.Type.CSV            // ou PLAINTEXT si besoin
-});
+        // Centralisation création fichier + SFTP
+        var res = SFTPUtil.exportFileAndSend({
+            fileName: fileName,
+            fileContent: fileContent,
+            folderId: folderId,
+            queueIdsDone: queueIdsDone,
+            queueIdsError: queueIdsError,
+            logPrefix: 'SO EXPORT',
+            fileType: file.Type.CSV
+        });
 
-if (!res.success) {
-  log.error('REDUCE - export error', res.message);
-  return;
-}
+        if (!res.success) {
+            log.error('REDUCE - export error', res.message);
+            // SFTPUtil s'occupe déjà des statuts, on s'arrête là
+            return;
+        }
     }
+
+    // ---------------- summarize ----------------
 
     function summarize(summary) {
         log.audit('SUMMARIZE usage', {
@@ -203,173 +230,184 @@ if (!res.success) {
         log.audit('SUMMARIZE end', 'OK');
     }
 
-    // ---------- Helpers ----------
+    // ---------------- Helpers métiers ----------------
 
-function buildLinesForSalesOrder(soRec, headerCols, sep) {
-    var lines = [];
-    var soId = soRec.id || soRec.getValue({ fieldId: 'tranid' });
-    var separator = sep || ';';
+    function buildLinesForSalesOrder(soRec, headerCols, sep) {
+        var lines = [];
+        var soId = soRec.id || soRec.getValue({ fieldId: 'tranid' });
+        var separator = sep || ';';
 
-    var lineCount = soRec.getLineCount({ sublistId: 'item' });
-    log.debug('SO Lines', {
-        soId: soId,
-        lineCount: lineCount
-    });
-    
-    var addr = QueueUtil.getAddressInfos(soRec.id);
-
-    // ----- Données d'entête (répétées sur chaque ligne) -----
-    var headerData = {
-        Owner:          'CDE',
-        Site:           'STOCK',
-        OrderNumber:    soRec.getValue({ fieldId: 'tranid' }) || '',
-        OrderDate:      formatDateYYYYMMDD(soRec.getValue({ fieldId: 'trandate' })),
-        DueDate:        formatDateYYYYMMDD(soRec.getValue({ fieldId: 'shipdate' })),
-        Commentaire:    soRec.getValue({ fieldId: 'custbody_cde_logistic_comment' }) || '',
-
-        CustomerBillTo: soRec.getValue({ fieldId: 'entity' }) || '',
-        CBTCompanyName: soRec.getText({ fieldId: 'entity' }) || '',
-
-        CustomerBillTo: soRec.getValue({ fieldId: 'entity' }) || '',             // code client facturé
-
-        CBTCompanyName: addr.billaddressee || '',                                // nom facturation
-        CBTAddress1:    addr.billaddress1  || '',
-        CBTAddress2:    addr.billaddress2  || '',
-        CBTAddress3:    '',                                                      // tu pourras compléter si besoin
-        CBTZipCode:     addr.billzip       || '',
-        CBTCity:        addr.billcity      || '',
-        CBTState:       '',                                                      // si tu n'as pas la notion de région
-        CBTCounty:      addr.billcountry   || '',
-        CBTContact:     '',                                                      // si tu as un champ contact spécifique, on pourra l'ajouter
-        CBTVoicePhone:  '',                                                      // à mapper si tu as un téléphone facturation
-        CBTEmail:       soRec.getValue({ fieldId: 'custbody_cde_billto_email' }) || '',
-
-
-        CustomerShipTo: soRec.getValue({ fieldId: 'entity' }) || '',             // code adresse livrée si tu as un custom
-        CSTCompanyName: addr.shipaddressee || '',
-        CSTAddress1:    addr.shipaddress1  || '',
-        CSTAddress2:    addr.shipaddress2  || '',
-        CSTAddress3:    '',
-        CSTZipCode:     addr.shipzip       || '',
-        CSTCity:        addr.shipcity      || '',
-        CSTState:       '',                                                     // idem région
-        CSTCountry:     addr.shipcountry   || '',
-        CSTContact:     addr.attention     || '',
-        CSTVoicePhone:  addr.phone         || '',
-        CSTEmail:       soRec.getValue({ fieldId: 'custbody_cde_shipto_email' }) || '',
-
-        Carrier:        soRec.getText({ fieldId: 'shipcarrier' }) || '',
-        ShippingMethod: soRec.getText({ fieldId: 'shipmethod' }) || ''
-    };
-
-    for (var i = 0; i < lineCount; i++) {
-        var itemId = soRec.getSublistValue({
-            sublistId: 'item',
-            fieldId: 'item',
-            line: i
-        });
-        var itemType = soRec.getSublistValue({
-            sublistId: 'item',
-            fieldId: 'itemtype',
-            line: i
-        });
-        var qty = soRec.getSublistValue({
-            sublistId: 'item',
-            fieldId: 'quantity',
-            line: i
-        });
-
-        log.debug('SO line analysis', {
+        var lineCount = soRec.getLineCount({ sublistId: 'item' });
+        log.debug('SO Lines', {
             soId: soId,
-            line: i,
-            itemId: itemId,
-            itemType: itemType,
-            quantity: qty
+            lineCount: lineCount
         });
 
-        if (!itemId) {
-            continue;
-        }
+        var addr = QueueUtil.getAddressInfos(soRec.id);
 
-        var itemCode = QueueUtil.getItemCode(itemId);
+        // ----- Données d'entête (répétées sur chaque ligne) -----
+        var headerData = {
+            Owner:          'CDE',
+            Site:           'STOCK',
+            OrderNumber:    soRec.getValue({ fieldId: 'tranid' }) || '',
+            OrderDate:      formatDateYYYYMMDD(soRec.getValue({ fieldId: 'trandate' })),
+            DueDate:        formatDateYYYYMMDD(soRec.getValue({ fieldId: 'shipdate' })),
+            Commentaire:    soRec.getValue({ fieldId: 'custbody_cde_logistic_comment' }) || '',
 
-        var lineNumber = soRec.getSublistValue({
-            sublistId: 'item',
-            fieldId: 'line',
-            line: i
-        });
+            CustomerBillTo: soRec.getValue({ fieldId: 'entity' }) || '',
+            CBTCompanyName: addr.billaddressee || '',
+            CBTAddress1:    addr.billaddress1  || '',
+            CBTAddress2:    addr.billaddress2  || '',
+            CBTAddress3:    '',
+            CBTZipCode:     addr.billzip       || '',
+            CBTCity:        addr.billcity      || '',
+            CBTState:       '',
+            CBTCounty:      addr.billcountry   || '',
+            CBTContact:     '',
+            CBTVoicePhone:  '',
+            CBTEmail:       soRec.getValue({ fieldId: 'custbody_cde_billto_email' }) || '',
 
-        var itemDisplay = soRec.getSublistValue({
-            sublistId: 'item',
-            fieldId: 'item_display',
-            line: i
-        });
+            CustomerShipTo: soRec.getValue({ fieldId: 'entity' }) || '',
+            CSTCompanyName: addr.shipaddressee || '',
+            CSTAddress1:    addr.shipaddress1  || '',
+            CSTAddress2:    addr.shipaddress2  || '',
+            CSTAddress3:    '',
+            CSTZipCode:     addr.shipzip       || '',
+            CSTCity:        addr.shipcity      || '',
+            CSTState:       '',
+            CSTCountry:     addr.shipcountry   || '',
+            CSTContact:     addr.attention     || '',
+            CSTVoicePhone:  addr.phone         || '',
+            CSTEmail:       soRec.getValue({ fieldId: 'custbody_cde_shipto_email' }) || '',
 
-        var lineMemo = soRec.getSublistValue({
-            sublistId: 'item',
-            fieldId: 'description',
-            line: i
-        });
+            Carrier:        soRec.getText({ fieldId: 'shipcarrier' }) || '',
+            ShippingMethod: soRec.getText({ fieldId: 'shipmethod' }) || ''
+        };
 
-        var uom = soRec.getSublistText({
-            sublistId: 'item',
-            fieldId: 'unit',
-            line: i
-        });
-
-        var lineComment =  soRec.getSublistText({
-            sublistId: 'item',
-            fieldId: 'custcol_cde_logistic_comment',
-            line: i
-        });
-
-        var kitFlag = '0';
-        if (itemType === 'Kit') {
-            kitFlag = '2';
-        }
-
-        var invDetail = null;
-        var assCount  = 0;
-        try {
-            invDetail = soRec.getSublistSubrecord({
+        for (var i = 0; i < lineCount; i++) {
+            var itemId = soRec.getSublistValue({
                 sublistId: 'item',
-                fieldId: 'inventorydetail',
+                fieldId: 'item',
                 line: i
             });
-            if (invDetail) {
-                assCount = invDetail.getLineCount({ sublistId: 'inventoryassignment' });
+            var itemType = soRec.getSublistValue({
+                sublistId: 'item',
+                fieldId: 'itemtype',
+                line: i
+            });
+            var qty = soRec.getSublistValue({
+                sublistId: 'item',
+                fieldId: 'quantity',
+                line: i
+            });
+
+            log.debug('SO line analysis', {
+                soId: soId,
+                line: i,
+                itemId: itemId,
+                itemType: itemType,
+                quantity: qty
+            });
+
+            if (!itemId) continue;
+
+            var itemCode = QueueUtil.getItemCode(itemId);
+
+            var lineNumber = soRec.getSublistValue({
+                sublistId: 'item',
+                fieldId: 'line',
+                line: i
+            });
+
+            var lineMemo = soRec.getSublistValue({
+                sublistId: 'item',
+                fieldId: 'description',
+                line: i
+            });
+
+            var uom = soRec.getSublistText({
+                sublistId: 'item',
+                fieldId: 'unit',
+                line: i
+            });
+
+            var lineComment = soRec.getSublistText({
+                sublistId: 'item',
+                fieldId: 'custcol_cde_logistic_comment',
+                line: i
+            });
+
+            var kitFlag = '0';
+            if (itemType === 'Kit') {
+                kitFlag = '2';
             }
-        } catch (e) {
-            invDetail = null;
-            assCount = 0;
-        }
 
-        log.debug('SO line inventory detail', {
-            soId: soId,
-            line: i,
-            hasInvDetail: !!invDetail,
-            assCount: assCount
-        });
-
-        if (invDetail && assCount > 0) {
-            // CAS 1 : avec lots → une ligne par lot
-            for (var j = 0; j < assCount; j++) {
-                var lotNumber = invDetail.getSublistText({
-                    sublistId: 'inventoryassignment',
-                    fieldId: 'issueinventorynumber',
-                    line: j
+            var invDetail = null;
+            var assCount  = 0;
+            try {
+                invDetail = soRec.getSublistSubrecord({
+                    sublistId: 'item',
+                    fieldId: 'inventorydetail',
+                    line: i
                 });
+                if (invDetail) {
+                    assCount = invDetail.getLineCount({ sublistId: 'inventoryassignment' });
+                }
+            } catch (e) {
+                invDetail = null;
+                assCount = 0;
+            }
 
-                var lotQty = invDetail.getSublistValue({
-                    sublistId: 'inventoryassignment',
-                    fieldId: 'quantity',
-                    line: j
-                });
+            log.debug('SO line inventory detail', {
+                soId: soId,
+                line: i,
+                hasInvDetail: !!invDetail,
+                assCount: assCount
+            });
 
-                var lineData = {
+            if (invDetail && assCount > 0) {
+                // CAS 1 : avec lots → une ligne par lot
+                for (var j = 0; j < assCount; j++) {
+                    var lotNumber = invDetail.getSublistText({
+                        sublistId: 'inventoryassignment',
+                        fieldId: 'issueinventorynumber',
+                        line: j
+                    });
+
+                    var lotQty = invDetail.getSublistValue({
+                        sublistId: 'inventoryassignment',
+                        fieldId: 'quantity',
+                        line: j
+                    });
+
+                    var lineData = {
+                        LineNumber:        lineNumber,
+                        ItemNumber:        itemCode,
+                        OrderedQuantity:   lotQty,
+                        Comment:           lineMemo,
+                        Enseigne:          headerData.Owner,
+                        KitouComposant:    kitFlag,
+                        KitItemNumber:     '',
+                        KitLineNumber:     '',
+                        NbParkit:          '',
+                        PointRelais:       '',
+                        Zone:              soRec.getValue({ fieldId: 'custbody_cde_zone_erp' }) || '',
+                        UnitOfMeasure:     uom,
+                        LotNumber:         lotNumber,
+                        UV:                uom,
+                        LineNumberERP:     lineNumber,
+                        Comment:           lineComment
+                    };
+
+                    var csvLine = buildSOExportLine(headerCols, headerData, lineData, separator);
+                    lines.push(csvLine);
+                }
+            } else {
+                // CAS 2 : pas de lots → une ligne par ligne de commande
+                var lineDataSingle = {
                     LineNumber:        lineNumber,
                     ItemNumber:        itemCode,
-                    OrderedQuantity:   lotQty,
+                    OrderedQuantity:   qty,
                     Comment:           lineMemo,
                     Enseigne:          headerData.Owner,
                     KitouComposant:    kitFlag,
@@ -379,124 +417,89 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
                     PointRelais:       '',
                     Zone:              soRec.getValue({ fieldId: 'custbody_cde_zone_erp' }) || '',
                     UnitOfMeasure:     uom,
-                    LotNumber:         lotNumber,
+                    LotNumber:         '',
                     UV:                uom,
                     LineNumberERP:     lineNumber,
                     Comment:           lineComment
                 };
 
-                var csvLine = buildSOExportLine(headerCols, headerData, lineData, separator);
-                lines.push(csvLine);
+                var csvLineSingle = buildSOExportLine(headerCols, headerData, lineDataSingle, separator);
+                lines.push(csvLineSingle);
             }
-        } else {
-            // CAS 2 : pas de lots (ou subrecord vide) → une ligne par ligne de commande
-            var lineDataSingle = {
-                LineNumber:        lineNumber,
-                ItemNumber:        itemCode,
-                OrderedQuantity:   qty,
-                Comment:           lineMemo,
-                Enseigne:          headerData.Owner,
-                KitouComposant:    kitFlag,
-                KitItemNumber:     '',
-                KitLineNumber:     '',
-                NbParkit:          '',
-                PointRelais:       '',
-                Zone:              soRec.getValue({ fieldId: 'custbody_cde_zone_erp' }) || '',
-                UnitOfMeasure:     uom,
-                LotNumber:         '',
-                UV:                uom,
-                LineNumberERP:     lineNumber,
-                Comment:           lineComment
-            };
-
-            var csvLineSingle = buildSOExportLine(headerCols, headerData, lineDataSingle, separator);
-            lines.push(csvLineSingle);
         }
+
+        log.debug('SO export lines built', {
+            soId: soId,
+            exportedLines: lines.length
+        });
+
+        return lines;
     }
 
-    log.debug('SO export lines built', {
-        soId: soId,
-        exportedLines: lines.length
-    });
+    function buildSOExportLine(headerCols, headerData, lineData, sep) {
+        var separator = sep || ';';
 
-    return lines;
-}
+        return headerCols.map(function (col) {
+            switch (col) {
+                case 'Owner':                return sanitizeValue(headerData.Owner);
+                case 'Site':                 return sanitizeValue(headerData.Site);
+                case 'OrderNumber':          return sanitizeValue(headerData.OrderNumber);
+                case 'OrderDate':            return sanitizeValue(headerData.OrderDate);
+                case 'DueDate':              return sanitizeValue(headerData.DueDate);
 
+                case 'CustomerBillTo':       return sanitizeValue(headerData.CustomerBillTo);
+                case 'CBTCompanyName':       return sanitizeValue(headerData.CBTCompanyName);
+                case 'CBTAddress1':          return sanitizeValue(headerData.CBTAddress1);
+                case 'CBTAddress2':          return sanitizeValue(headerData.CBTAddress2);
+                case 'CBTAddress3':          return sanitizeValue(headerData.CBTAddress3);
+                case 'CBTZipCode':           return sanitizeValue(headerData.CBTZipCode);
+                case 'CBTCity':              return sanitizeValue(headerData.CBTCity);
+                case 'CBTState':             return sanitizeValue(headerData.CBTState);
+                case 'CBTCountry':           return sanitizeValue(headerData.CBTCounty);
+                case 'CBTContact':           return sanitizeValue(headerData.CBTContact);
+                case 'CBTVoicePhone':        return sanitizeValue(headerData.CBTVoicePhone);
+                case 'CBTEmail':             return sanitizeValue(headerData.CBTEmail);
 
+                case 'CustomerShipTo':       return sanitizeValue(headerData.CustomerShipTo);
+                case 'CSTCompanyName':       return sanitizeValue(headerData.CSTCompanyName);
+                case 'CSTAddress1':          return sanitizeValue(headerData.CSTAddress1);
+                case 'CSTAddress2':          return sanitizeValue(headerData.CSTAddress2);
+                case 'CSTAddress3':          return sanitizeValue(headerData.CSTAddress3);
+                case 'CSTZipCode':           return sanitizeValue(headerData.CSTZipCode);
+                case 'CSTCity':              return sanitizeValue(headerData.CSTCity);
+                case 'CSTState':             return sanitizeValue(headerData.CSTState);
+                case 'CSTCountry':           return sanitizeValue(headerData.CSTCountry);
+                case 'CSTContact':           return sanitizeValue(headerData.CSTContact);
+                case 'CSTVoicePhone':        return sanitizeValue(headerData.CSTVoicePhone);
+                case 'CSTEmail':             return sanitizeValue(headerData.CSTEmail);
 
+                case 'Carrier':              return sanitizeValue(headerData.Carrier);
+                case 'ShippingMethod':       return sanitizeValue(headerData.ShippingMethod);
+                case 'Commentaire':          return sanitizeValue(headerData.Commentaire);
 
-    /**
-     * Construit une ligne CSV en combinant :
-     * - les données d'entête (headerData)
-     * - les données de ligne (lineData)
-     * selon l'ordre des colonnes défini dans headerCols.
-     */
-   function buildSOExportLine(headerCols, headerData, lineData, sep) {
-    var separator = sep || ';';
+                case 'LineNumber':           return sanitizeValue(lineData.LineNumber);
+                case 'ItemNumber':           return sanitizeValue(lineData.ItemNumber);
+                case 'OrderedQuantity':      return sanitizeValue(lineData.OrderedQuantity);
+                case 'Comment':              return sanitizeValue(lineData.Comment);
+                case 'Enseigne':             return sanitizeValue(lineData.Enseigne);
 
-    return headerCols.map(function (col) {
-        switch (col) {
-            case 'Owner':                return sanitizeValue(headerData.Owner);
-            case 'Site':                 return sanitizeValue(headerData.Site);
-            case 'OrderNumber':          return sanitizeValue(headerData.OrderNumber);
-            case 'OrderDate':            return sanitizeValue(headerData.OrderDate);
-            case 'DueDate':              return sanitizeValue(headerData.DueDate);
+                case 'KitouComposant':       return sanitizeValue(lineData.KitouComposant);
+                case 'KitItemNumber':        return sanitizeValue(lineData.KitItemNumber);
+                case 'KitLineNumber':        return sanitizeValue(lineData.KitLineNumber);
+                case 'NbParkit':             return sanitizeValue(lineData.NbParKit);
+                case 'PointRelais':          return sanitizeValue(lineData.PointRelais);
 
-            case 'CustomerBillTo':       return sanitizeValue(headerData.CustomerBillTo);
-            case 'CBTCompanyName':       return sanitizeValue(headerData.CBTCompanyName);
-            case 'CBTAddress1':          return sanitizeValue(headerData.CBTAddress1);
-            case 'CBTAddress2':          return sanitizeValue(headerData.CBTAddress2);
-            case 'CBTAddress3':          return sanitizeValue(headerData.CBTAddress3);
-            case 'CBTZipCode':           return sanitizeValue(headerData.CBTZipCode);
-            case 'CBTCity':              return sanitizeValue(headerData.CBTCity);
-            case 'CBTState':             return sanitizeValue(headerData.CBTState);
-            case 'CBTCountry':           return sanitizeValue(headerData.CBTCounty);
-            case 'CBTContact':           return sanitizeValue(headerData.CBTContact);
-            case 'CBTVoicePhone':        return sanitizeValue(headerData.CBTVoicePhone);
-            case 'CBTEmail':             return sanitizeValue(headerData.CBTEmail);
+                case 'Zone':                 return sanitizeValue(lineData.Zone);
+                case 'UnitOfMeasure':        return sanitizeValue(lineData.UnitOfMeasure);
+                case 'LotNumber':            return sanitizeValue(lineData.LotNumber);
+                case 'UV':                   return sanitizeValue(lineData.UV);
+                case 'LineNumberERP':        return sanitizeValue(lineData.LineNumberERP);
 
-            case 'CustomerShipTo':       return sanitizeValue(headerData.CustomerShipTo);
-            case 'CSTCompanyName':       return sanitizeValue(headerData.CSTCompanyName);
-            case 'CSTAddress1':          return sanitizeValue(headerData.CSTAddress1);
-            case 'CSTAddress2':          return sanitizeValue(headerData.CSTAddress2);
-            case 'CSTAddress3':          return sanitizeValue(headerData.CSTAddress3);
-            case 'CSTZipCode':           return sanitizeValue(headerData.CSTZipCode);
-            case 'CSTCity':              return sanitizeValue(headerData.CSTCity);
-            case 'CSTState':             return sanitizeValue(headerData.CSTState);
-            case 'CSTCountry':           return sanitizeValue(headerData.CSTCountry);
-            case 'CSTContact':           return sanitizeValue(headerData.CSTContact);
-            case 'CSTVoicePhone':        return sanitizeValue(headerData.CSTVoicePhone);
-            case 'CSTEmail':             return sanitizeValue(headerData.CSTEmail);
-
-            case 'Carrier':              return sanitizeValue(headerData.Carrier);
-            case 'ShippingMethod':       return sanitizeValue(headerData.ShippingMethod);
-            case 'Commentaire':          return sanitizeValue(headerData.Commentaire);
-
-            case 'LineNumber':           return sanitizeValue(lineData.LineNumber);
-            case 'ItemNumber':           return sanitizeValue(lineData.ItemNumber);
-            case 'OrderedQuantity':      return sanitizeValue(lineData.OrderedQuantity);
-            case 'Comment':              return sanitizeValue(lineData.Comment);
-            case 'Enseigne':             return sanitizeValue(lineData.Enseigne);
-
-            case 'KitouComposant':       return sanitizeValue(lineData.KitouComposant);
-            case 'KitItemNumber':        return sanitizeValue(lineData.KitItemNumber);
-            case 'KitLineNumber':        return sanitizeValue(lineData.KitLineNumber);
-            case 'NbParkit':             return sanitizeValue(lineData.NbParKit);
-            case 'PointRelais':          return sanitizeValue(lineData.PointRelais);
-
-            case 'Zone':                 return sanitizeValue(lineData.Zone);
-            case 'UnitOfMeasure':        return sanitizeValue(lineData.UnitOfMeasure);
-            case 'LotNumber':            return sanitizeValue(lineData.LotNumber);
-            case 'UV':                   return sanitizeValue(lineData.UV);
-            case 'LineNumberERP':        return sanitizeValue(lineData.LineNumberERP);
-
-            // les autres colonnes du header SO sont pour l'instant renvoyées vides
-            default:
-                return '';
-        }
-    }).join(separator);
-}
-
+                default:
+                    return '';
+            }
+        }).join(separator);
+    }
 
     function markQueueStatus(queueId, statusValue, errorMsg) {
         try {
@@ -519,25 +522,6 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
             log.error('markQueueStatus ERROR', {
                 queueId: queueId,
                 statusValue: statusValue,
-                error: e.message
-            });
-        }
-    }
-
-    function linkQueueToFile(queueId, fileId) {
-        try {
-            record.submitFields({
-                type: 'customrecord_cde_item_sync_queue',
-                id: queueId,
-                values: {
-                    custrecord_sync_file: fileId
-                },
-                options: { enableSourcing: false, ignoreMandatoryFields: true }
-            });
-        } catch (e) {
-            log.error('linkQueueToFile ERROR', {
-                queueId: queueId,
-                fileId: fileId,
                 error: e.message
             });
         }
