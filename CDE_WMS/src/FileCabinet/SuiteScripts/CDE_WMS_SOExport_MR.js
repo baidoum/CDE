@@ -220,11 +220,12 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
 
     // ----- Données d'entête (répétées sur chaque ligne) -----
     var headerData = {
-        Owner:          soRec.getValue({ fieldId: 'custbody_cde_owner' }) || '',
-        Site:           soRec.getText({ fieldId: 'location' }) || '',
+        Owner:          'CDE',
+        Site:           'STOCK',
         OrderNumber:    soRec.getValue({ fieldId: 'tranid' }) || '',
         OrderDate:      formatDateYYYYMMDD(soRec.getValue({ fieldId: 'trandate' })),
-        DueDate:        formatDateYYYYMMDD(soRec.getValue({ fieldId: 'duedate' })),
+        DueDate:        formatDateYYYYMMDD(soRec.getValue({ fieldId: 'shipdate' })),
+        Commentaire:    soRec.getValue({ fieldId: 'custbody_cde_logistic_comment' }) || '',
 
         CustomerBillTo: soRec.getValue({ fieldId: 'entity' }) || '',
         CBTCompanyName: soRec.getText({ fieldId: 'entity' }) || '',
@@ -244,7 +245,7 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
         CBTEmail:       soRec.getValue({ fieldId: 'custbody_cde_billto_email' }) || '',
 
 
-        CustomerShipTo: soRec.getValue({ fieldId: 'shipto' }) || '',             // code adresse livrée si tu as un custom
+        CustomerShipTo: soRec.getValue({ fieldId: 'entity' }) || '',             // code adresse livrée si tu as un custom
         CSTCompanyName: addr.shipaddressee || '',
         CSTAddress1:    addr.shipaddress1  || '',
         CSTAddress2:    addr.shipaddress2  || '',
@@ -258,8 +259,7 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
         CSTEmail:       soRec.getValue({ fieldId: 'custbody_cde_shipto_email' }) || '',
 
         Carrier:        soRec.getText({ fieldId: 'shipcarrier' }) || '',
-        ShippingMethod: soRec.getText({ fieldId: 'shipmethod' }) || '',
-        Commentaire:    soRec.getValue({ fieldId: 'memo' }) || ''
+        ShippingMethod: soRec.getText({ fieldId: 'shipmethod' }) || ''
     };
 
     for (var i = 0; i < lineCount; i++) {
@@ -291,6 +291,8 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
             continue;
         }
 
+        var itemCode = QueueUtil.getItemCode(itemId);
+
         var lineNumber = soRec.getSublistValue({
             sublistId: 'item',
             fieldId: 'line',
@@ -312,6 +314,12 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
         var uom = soRec.getSublistText({
             sublistId: 'item',
             fieldId: 'unit',
+            line: i
+        });
+
+        var lineComment =  soRec.getSublistText({
+            sublistId: 'item',
+            fieldId: 'custcol_cde_logistic_comment',
             line: i
         });
 
@@ -360,7 +368,7 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
 
                 var lineData = {
                     LineNumber:        lineNumber,
-                    ItemNumber:        itemDisplay,
+                    ItemNumber:        itemCode,
                     OrderedQuantity:   lotQty,
                     Comment:           lineMemo,
                     Enseigne:          headerData.Owner,
@@ -373,7 +381,8 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
                     UnitOfMeasure:     uom,
                     LotNumber:         lotNumber,
                     UV:                uom,
-                    LineNumberERP:     lineNumber
+                    LineNumberERP:     lineNumber,
+                    Comment:           lineComment
                 };
 
                 var csvLine = buildSOExportLine(headerCols, headerData, lineData, separator);
@@ -383,7 +392,7 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
             // CAS 2 : pas de lots (ou subrecord vide) → une ligne par ligne de commande
             var lineDataSingle = {
                 LineNumber:        lineNumber,
-                ItemNumber:        itemDisplay,
+                ItemNumber:        itemCode,
                 OrderedQuantity:   qty,
                 Comment:           lineMemo,
                 Enseigne:          headerData.Owner,
@@ -396,7 +405,8 @@ function buildLinesForSalesOrder(soRec, headerCols, sep) {
                 UnitOfMeasure:     uom,
                 LotNumber:         '',
                 UV:                uom,
-                LineNumberERP:     lineNumber
+                LineNumberERP:     lineNumber,
+                Comment:           lineComment
             };
 
             var csvLineSingle = buildSOExportLine(headerCols, headerData, lineDataSingle, separator);

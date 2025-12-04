@@ -289,6 +289,27 @@ function getAddressInfos(currentRecId) {
     return adresseInfos;
 }
 
+function getItemCode(itemId) {
+    if (!itemId) return '';
+
+    var itemSearch = search.create({
+        type: search.Type.ITEM,
+        filters: [
+            ['internalid', 'is', itemId]
+        ],
+        columns: [
+            'itemid'
+        ]
+    });
+
+    var result = itemSearch.run().getRange({ start: 0, end: 1 });
+
+    if (result && result.length > 0) {
+        return result[0].getValue('itemid');
+    }
+    return '';
+}
+
 
   return {
     enqueue,
@@ -297,6 +318,7 @@ function getAddressInfos(currentRecId) {
     STATUS,
     TOPIC,
     FIELDS,
-    getAddressInfos
+    getAddressInfos,
+    getItemCode
   };
 });
