@@ -246,7 +246,7 @@ if (!res.success) {
     return headerCols.map((col) => {
       switch (col) {
         case 'Owner':
-          return sanitizeValue(p.owner);
+          return 'CDE';
 
         case 'ItemNumber':
           return sanitizeValue(p.itemid);
@@ -263,6 +263,18 @@ if (!res.success) {
         case 'UsesDateFab':
           return '0';
 
+        case 'UsesDLV':
+          return '1';
+
+        case 'UsesDateRec':
+          return '0';
+
+        case 'UsesDateLimiteVente':
+          return '0';
+
+        case 'SurPalette':
+          return '0';
+
         case 'GereStock':
           return '1';
 
@@ -274,7 +286,7 @@ if (!res.success) {
           return sanitizeValue(p.status || '1');
 
         case 'ReferenceERP':
-          return sanitizeValue(p.id);
+          return sanitizeValue(p.itemid);
 
         case 'Type':
           return sanitizeValue(p.type || '');

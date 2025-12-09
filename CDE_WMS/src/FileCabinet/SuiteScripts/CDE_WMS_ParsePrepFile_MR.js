@@ -11,8 +11,8 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
 
     // ⚠️ Adapte ces IDs aux valeurs de ta liste WMS Inbound Status
     var INBOUND_STATUS = {
-        NEW:  '1',
-        DONE: '3',
+        NEW:   '1',
+        DONE:  '3',
         ERROR: '4'
     };
 
@@ -25,6 +25,21 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
     var LINE_STATUS = {
         NEW:   '1',
         ERROR: '2'
+    };
+
+    /**
+     * Index (0-based) des colonnes dans le fichier de retour préparation
+     * D’après ta spec :
+     *  - OrderNumber  = col C  -> index 2
+     *  - ItemNumber   = col AJ -> index 35
+     *  - OrderedQty   = col AK -> index 36
+     *  - LotNumber    = col BO -> index 66
+     */
+    var COL_INDEX = {
+        ORDER_NUMBER:  3,   
+        ITEM_NUMBER:   5,  
+        ORDERED_QTY:   20,  
+        LOT_NUMBER:    8   
     };
 
     // ---- Helpers ----
@@ -62,8 +77,8 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
 
     /**
      * Parse un fichier CSV séparé par ';'
-     * - première ligne = header
-     * - lignes suivantes = données
+     * - première ligne = header (ignorée)
+     * - lignes suivantes = données, sous forme d'array de colonnes
      */
     function parseCsvFile(contents) {
         var lines = contents.split(/\r?\n/);
@@ -73,40 +88,28 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
             return l && l.trim().length > 0;
         });
 
+        // au moins 2 lignes : header + 1 data
         if (!lines || lines.length < 2) {
-            return { headers: [], rows: [] };
+            return [];
         }
-
-        var headerLine = lines[0];
-        var headers = headerLine.split(';').map(function (h) {
-            return h.trim();
-        });
 
         var rows = [];
 
+        // on commence à 1 pour skipper le header
         for (var i = 1; i < lines.length; i++) {
             var line = lines[i];
             if (!line || !line.trim()) continue;
 
-            var cols = line.split(';');
-            var rowObj = {};
-
-            for (var c = 0; c < headers.length; c++) {
-                var key = headers[c];
-                var raw = cols[c] || '';
-
+            var cols = line.split(';').map(function (val) {
+                if (!val) return '';
                 // on enlève les guillemets éventuels + trim
-                raw = raw.replace(/^"+|"+$/g, '').trim();
+                return val.replace(/^"+|"+$/g, '').trim();
+            });
 
-                rowObj[key] = raw;
-            }
-            rows.push(rowObj);
+            rows.push(cols);
         }
 
-        return {
-            headers: headers,
-            rows: rows
-        };
+        return rows; // array de arrays
     }
 
     // ---- getInputData : sélection des fichiers inbound à parser ----
@@ -167,27 +170,26 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
             var f = file.load({ id: fileId });
             var contents = f.getContents();
 
-            var parsed = parseCsvFile(contents);
+            var rows = parseCsvFile(contents);
 
             log.debug('PARSE PREP FILE - file parsed', {
                 inboundId: inboundId,
                 fileId: fileId,
-                headerCount: parsed.headers.length,
-                rowCount: parsed.rows.length
+                rowCount: rows.length
             });
 
-            if (!parsed.rows || !parsed.rows.length) {
+            if (!rows || !rows.length) {
                 log.audit('PARSE PREP FILE - no data rows', 'Aucune ligne de données pour inbound ' + inboundId);
             }
 
             var createdCount = 0;
             var errorCount = 0;
 
-            parsed.rows.forEach(function (row, idx) {
-                var orderNumber   = (row['OrderNumber'] || '').trim();
-                var itemNumber    = (row['ItemNumber'] || '').trim();
-                var orderedQtyRaw = (row['OrderedQuantity'] || '').trim();
-                var lotNumber     = (row['LotNumber'] || '').trim();
+            rows.forEach(function (cols, idx) {
+                var orderNumber   = (cols[COL_INDEX.ORDER_NUMBER]  || '').trim();
+                var itemNumber    = (cols[COL_INDEX.ITEM_NUMBER]   || '').trim();
+                var orderedQtyRaw = (cols[COL_INDEX.ORDERED_QTY]   || '').trim();
+                var lotNumber     = (cols[COL_INDEX.LOT_NUMBER]    || '').trim();
 
                 // ignore lignes totalement vides
                 if (!orderNumber && !itemNumber && !lotNumber) {

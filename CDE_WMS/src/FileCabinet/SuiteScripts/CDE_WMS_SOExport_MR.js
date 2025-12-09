@@ -251,7 +251,7 @@ define([
             Site:           'STOCK',
             OrderNumber:    soRec.getValue({ fieldId: 'tranid' }) || '',
             OrderDate:      formatDateYYYYMMDD(soRec.getValue({ fieldId: 'trandate' })),
-            DueDate:        formatDateYYYYMMDD(soRec.getValue({ fieldId: 'shipdate' })),
+            DueDate:        formatDateYYYYMMDD(soRec.getValue({ fieldId: 'shipdate' })) || formatDateYYYYMMDD(soRec.getValue({ fieldId: 'trandate' })) ,
             Commentaire:    soRec.getValue({ fieldId: 'custbody_cde_logistic_comment' }) || '',
 
             CustomerBillTo: soRec.getValue({ fieldId: 'entity' }) || '',
