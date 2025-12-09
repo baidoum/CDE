@@ -17,8 +17,12 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
     };
 
     // ⚠️ Adapte ces IDs aux valeurs de ta liste WMS Inbound Topic
+    // Exemple :
+    //  - 1 = retour préparation
+    //  - 2 = retour réception
     var INBOUND_TOPIC = {
-        PREPARATION_RETURN: '1'
+        PREPARATION_RETURN: '1',
+        RECEPTION_RETURN:   '2'  // <-- à adapter à la réalité de ta liste
     };
 
     // ⚠️ Adapte ces IDs aux valeurs de ta liste WMS Line Status
@@ -28,18 +32,35 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
     };
 
     /**
-     * Index (0-based) des colonnes dans le fichier de retour préparation
-     * D’après ta spec :
-     *  - OrderNumber  = col C  -> index 2
-     *  - ItemNumber   = col AJ -> index 35
-     *  - OrderedQty   = col AK -> index 36
-     *  - LotNumber    = col BO -> index 66
+     * Index (0-based) des colonnes dans les fichiers
+     * On définit un mapping par type de fichier WMS.
      */
     var COL_INDEX = {
-        ORDER_NUMBER:  2,   
-        ITEM_NUMBER:   4,  
-        ORDERED_QTY:   19,  
-        LOT_NUMBER:    8   
+
+        // === Retour préparation ===
+        PREPARATION: {
+
+            ORDER_NUMBER:  2,   
+            ITEM_NUMBER:   4,  
+            ORDERED_QTY:   19,  
+            LOT_NUMBER:    8,
+            LINE_NUMBER_ERP:3   
+        },
+
+        // === Retour réception ===
+        // À adapter en fonction de ton analyse des fichiers réception :
+        // mets ici les indexes réels des colonnes correspondant à :
+        //  - Numéro de commande (PO ou SO selon le cas)
+        //  - Code article
+        //  - Quantité
+        //  - Lot (si fourni)
+        RECEPTION: {
+            ORDER_NUMBER:  2,   
+            ITEM_NUMBER:   4, 
+            ORDERED_QTY:   15,  
+            LOT_NUMBER:    8,
+            LINE_NUMBER_ERP: 39 
+        }
     };
 
     // ---- Helpers ----
@@ -112,21 +133,39 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
         return rows; // array de arrays
     }
 
+    /**
+     * Récupère le mapping de colonnes en fonction du topic du fichier
+     */
+    function getColumnMappingForTopic(topicId) {
+        if (topicId === INBOUND_TOPIC.PREPARATION_RETURN) {
+            return COL_INDEX.PREPARATION;
+        }
+        if (topicId === INBOUND_TOPIC.RECEPTION_RETURN) {
+            return COL_INDEX.RECEPTION;
+        }
+        return null;
+    }
+
     // ---- getInputData : sélection des fichiers inbound à parser ----
 
     function getInputData() {
-        log.audit('PARSE PREP FILE - getInputData', 'Start');
+        log.audit('PARSE WMS FILE - getInputData', 'Start');
 
         var inboundSearch = search.create({
             type: REC_INBOUND_FILE,
             filters: [
                 ['custrecord_wms_in_status', 'anyof', INBOUND_STATUS.NEW],
                 'AND',
-                ['custrecord_wms_in_topic', 'anyof', INBOUND_TOPIC.PREPARATION_RETURN]
+                [
+                    ['custrecord_wms_in_topic', 'anyof', INBOUND_TOPIC.PREPARATION_RETURN],
+                    'OR',
+                    ['custrecord_wms_in_topic', 'anyof', INBOUND_TOPIC.RECEPTION_RETURN]
+                ]
             ],
             columns: [
                 'internalid',
-                'custrecord_wms_in_file'
+                'custrecord_wms_in_file',
+                'custrecord_wms_in_topic'
             ]
         });
 
@@ -139,15 +178,19 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
         var searchResult = JSON.parse(context.value);
         var inboundId = searchResult.id;
         var fileField = searchResult.values['custrecord_wms_in_file'];
-        var fileId = fileField && fileField.value;
+        var topicField = searchResult.values['custrecord_wms_in_topic'];
 
-        log.audit('PARSE PREP FILE - MAP start', {
+        var fileId  = fileField && fileField.value;
+        var topicId = topicField && topicField.value;
+
+        log.audit('PARSE WMS FILE - MAP start', {
             inboundId: inboundId,
-            fileId: fileId
+            fileId: fileId,
+            topicId: topicId
         });
 
         if (!fileId) {
-            log.error('PARSE PREP FILE - MAP', 'Aucun fichier associé au inbound ' + inboundId);
+            log.error('PARSE WMS FILE - MAP', 'Aucun fichier associé au inbound ' + inboundId);
             record.submitFields({
                 type: REC_INBOUND_FILE,
                 id: inboundId,
@@ -160,9 +203,24 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
             return;
         }
 
+        var colMap = getColumnMappingForTopic(topicId);
+        if (!colMap) {
+            log.error('PARSE WMS FILE - MAP', 'Aucun mapping de colonnes pour topic ' + topicId);
+            record.submitFields({
+                type: REC_INBOUND_FILE,
+                id: inboundId,
+                values: {
+                    custrecord_wms_in_status: INBOUND_STATUS.ERROR,
+                    custrecord_wms_in_error: 'Mapping colonnes introuvable pour topic ' + topicId
+                },
+                options: { ignoreMandatoryFields: true }
+            });
+            return;
+        }
+
         // Idempotence : si des lignes existent déjà pour ce fichier, on ne refait rien
         if (prepLinesExistForInbound(inboundId)) {
-            log.audit('PARSE PREP FILE - MAP skip', 'Lignes déjà créées pour inbound ' + inboundId);
+            log.audit('PARSE WMS FILE - MAP skip', 'Lignes déjà créées pour inbound ' + inboundId);
             return;
         }
 
@@ -172,24 +230,66 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
 
             var rows = parseCsvFile(contents);
 
-            log.debug('PARSE PREP FILE - file parsed', {
+            log.debug('PARSE WMS FILE - file parsed', {
                 inboundId: inboundId,
                 fileId: fileId,
+                topicId: topicId,
                 rowCount: rows.length
             });
 
             if (!rows || !rows.length) {
-                log.audit('PARSE PREP FILE - no data rows', 'Aucune ligne de données pour inbound ' + inboundId);
+                log.audit('PARSE WMS FILE - no data rows', 'Aucune ligne de données pour inbound ' + inboundId);
             }
 
             var createdCount = 0;
             var errorCount = 0;
 
             rows.forEach(function (cols, idx) {
-                var orderNumber   = (cols[COL_INDEX.ORDER_NUMBER]  || '').trim();
-                var itemNumber    = (cols[COL_INDEX.ITEM_NUMBER]   || '').trim();
-                var orderedQtyRaw = (cols[COL_INDEX.ORDERED_QTY]   || '').trim();
-                var lotNumber     = (cols[COL_INDEX.LOT_NUMBER]    || '').trim();
+
+                // sécurité : si la ligne n’a pas assez de colonnes, on log et on passe en erreur
+                var minIndex = Math.max(
+                    colMap.ORDER_NUMBER,
+                    colMap.ITEM_NUMBER,
+                    colMap.ORDERED_QTY,
+                    colMap.LOT_NUMBER
+                );
+                if (cols.length <= minIndex) {
+                    var errTooShort = 'Ligne ' + idx + ' : nombre de colonnes insuffisant (' + cols.length + ')';
+                    log.error('PARSE WMS FILE - row too short', {
+                        inboundId: inboundId,
+                        lineIndex: idx,
+                        colCount: cols.length,
+                        requiredMinIndex: minIndex
+                    });
+
+                    // On crée quand même une ligne d’erreur pour visibilité
+                    var prepErrRec = record.create({
+                        type: REC_PREP_LINE,
+                        isDynamic: false
+                    });
+
+                    prepErrRec.setValue({
+                        fieldId: 'custrecordwms_prep_parent_file',
+                        value: inboundId
+                    });
+                    prepErrRec.setValue({
+                        fieldId: 'custrecord_wms_line_status',
+                        value: LINE_STATUS.ERROR
+                    });
+                    prepErrRec.setValue({
+                        fieldId: 'custrecord_wms_error_mess',
+                        value: errTooShort
+                    });
+                    prepErrRec.save();
+                    errorCount++;
+                    return;
+                }
+
+                var orderNumber   = (cols[colMap.ORDER_NUMBER] || '').trim();
+                var itemNumber    = (cols[colMap.ITEM_NUMBER]   || '').trim();
+                var orderedQtyRaw = (cols[colMap.ORDERED_QTY]   || '').trim();
+                var lotNumber     = (cols[colMap.LOT_NUMBER]    || '').trim();
+                var lineNumberERP = (cols[colMap.LINE_NUMBER_ERP]    || '').trim();
 
                 // ignore lignes totalement vides
                 if (!orderNumber && !itemNumber && !lotNumber) {
@@ -205,6 +305,8 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
                 var soId = null;
                 var errorMsg = '';
 
+                // Pour l’instant : on cherche toujours un Sales Order par OrderNumber
+                // (si plus tard les fichiers réception sont liés à un PO, on fera un findPurchaseOrder() à la place
                 if (!orderNumber) {
                     errorMsg = 'OrderNumber manquant';
                 } else {
@@ -252,6 +354,13 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
                     });
                 }
 
+                if (lineNumberERP) {
+                    prepRec.setValue({
+                        fieldId: 'custrecord_wms_linenumber',
+                        value: lotNumber
+                    });
+                }
+
                 if (qty !== null) {
                     prepRec.setValue({
                         fieldId: 'custrecord_wms_quantity',
@@ -261,7 +370,7 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
 
                 if (errorMsg) {
                     prepRec.setValue({
-                        fieldId: 'custrecord_wms__line_status',
+                        fieldId: 'custrecord_wms_line_status',
                         value: LINE_STATUS.ERROR
                     });
                     prepRec.setValue({
@@ -271,7 +380,7 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
                     errorCount++;
                 } else {
                     prepRec.setValue({
-                        fieldId: 'custrecord_wms__line_status',
+                        fieldId: 'custrecord_wms_line_status',
                         value: LINE_STATUS.NEW
                     });
                 }
@@ -280,9 +389,10 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
                 createdCount++;
 
                 if (createdCount <= 5) { // pour ne pas spammer les logs
-                    log.debug('PARSE PREP FILE - line created', {
+                    log.debug('PARSE WMS FILE - line created', {
                         inboundId: inboundId,
                         lineIndex: idx,
+                        topicId: topicId,
                         prepLineId: prepId,
                         orderNumber: orderNumber,
                         soId: soId,
@@ -303,17 +413,19 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
                 options: { ignoreMandatoryFields: true }
             });
 
-            log.audit('PARSE PREP FILE - MAP end', {
+            log.audit('PARSE WMS FILE - MAP end', {
                 inboundId: inboundId,
                 fileId: fileId,
+                topicId: topicId,
                 createdLines: createdCount,
                 errorLines: errorCount
             });
 
         } catch (e) {
-            log.error('PARSE PREP FILE - MAP fatal error', {
+            log.error('PARSE WMS FILE - MAP fatal error', {
                 inboundId: inboundId,
                 fileId: fileId,
+                topicId: topicId,
                 error: e.message,
                 stack: e.stack
             });
@@ -335,14 +447,14 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
     }
 
     function summarize(summary) {
-        log.audit('PARSE PREP FILE - summarize', {
+        log.audit('PARSE WMS FILE - summarize', {
             usage: summary.usage,
             concurrency: summary.concurrency,
             yields: summary.yields
         });
 
         summary.mapSummary.errors.iterator().each(function (key, error) {
-            log.error('PARSE PREP FILE - map error', {
+            log.error('PARSE WMS FILE - map error', {
                 key: key,
                 error: error
             });
@@ -350,14 +462,14 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
         });
 
         summary.reduceSummary.errors.iterator().each(function (key, error) {
-            log.error('PARSE PREP FILE - reduce error', {
+            log.error('PARSE WMS FILE - reduce error', {
                 key: key,
                 error: error
             });
             return true;
         });
 
-        log.audit('PARSE PREP FILE', 'Terminé');
+        log.audit('PARSE WMS FILE', 'Terminé');
     }
 
     return {
