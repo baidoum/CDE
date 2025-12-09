@@ -36,9 +36,9 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
      *  - LotNumber    = col BO -> index 66
      */
     var COL_INDEX = {
-        ORDER_NUMBER:  3,   
-        ITEM_NUMBER:   5,  
-        ORDERED_QTY:   20,  
+        ORDER_NUMBER:  2,   
+        ITEM_NUMBER:   4,  
+        ORDERED_QTY:   19,  
         LOT_NUMBER:    8   
     };
 
