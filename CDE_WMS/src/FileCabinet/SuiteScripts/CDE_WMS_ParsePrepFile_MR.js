@@ -6,7 +6,7 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
 
     // ---- Constantes pour les custom records / statuts ----
 
-    var REC_INBOUND_FILE = 'customrecord_cde_wms_inbound_file';
+    var REC_INBOUND_FILE = 'customrecord_cde_wms_inbound';
     var REC_PREP_LINE    = 'customrecord_cde_wms_prep_line';
 
     // ⚠️ Adapte ces IDs aux valeurs de ta liste WMS Inbound Status
