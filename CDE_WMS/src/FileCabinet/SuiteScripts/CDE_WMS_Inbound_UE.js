@@ -13,15 +13,21 @@ define(['N/ui/serverWidget', 'N/log'], function (serverWidget, log) {
             var form = context.form;
             var rec  = context.newRecord;
 
+            // On utilise l'ID du Client Script, exactement comme ton script initial
+            form.clientScriptFileId = 7290; // CDE_WMS_Inbound_CS.js
 
-            form.clientScriptFileId = 7290;
-
-            // 2) Bouton qui appelle la fonction du client script
+            // --- Bouton pour traiter la préparation (Sales Orders → Item Fulfillment) ---
             form.addButton({
                 id: 'custpage_wms_prep_process',
                 label: 'Traiter la préparation WMS',
-                // on passe l’ID du inbound au client script
                 functionName: 'cdeWmsProcessPrep(' + rec.id + ')'
+            });
+
+            // --- Bouton pour traiter la réception (Purchase Orders → Item Receipt) ---
+            form.addButton({
+                id: 'custpage_wms_receipt_process',
+                label: 'Traiter la réception WMS',
+                functionName: 'cdeWmsProcessReceipt(' + rec.id + ')'
             });
 
         } catch (e) {
