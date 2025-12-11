@@ -96,6 +96,49 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
         return null;
     }
 
+    function findPurchaseOrder(orderNumber) {
+    if (!orderNumber) return null;
+
+    var s = search.create({
+        type: search.Type.PURCHASE_ORDER,
+        filters: [
+            ['tranid', 'is', orderNumber]
+        ],
+        columns: ['internalid']
+    });
+
+    var res = s.run().getRange({ start: 0, end: 1 });
+    if (res && res.length > 0) {
+        return res[0].id;
+    }
+    return null;
+    }
+
+
+    function findItemByCode(itemNumber) {
+        if (!itemNumber) return null;
+
+        var code = String(itemNumber).trim();
+            if (!code) return null;
+
+            var itemSearch = search.create({
+                type: search.Type.ITEM,
+                filters: [
+                    ['itemid', 'is', code]
+                ],
+                columns: ['internalid']
+            });
+
+            var res = itemSearch.run().getRange({ start: 0, end: 1 });
+
+            if (res && res.length > 0) {
+                return res[0].id;  // Internal ID de l'article
+            }
+
+        return null;
+    }
+
+
     /**
      * Parse un fichier CSV séparé par ';'
      * - première ligne = header (ignorée)
@@ -310,9 +353,18 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
                 if (!orderNumber) {
                     errorMsg = 'OrderNumber manquant';
                 } else {
-                    soId = findSalesOrder(orderNumber);
-                    if (!soId) {
-                        errorMsg = 'Sales Order introuvable pour OrderNumber = ' + orderNumber;
+                    if (topicId === INBOUND_TOPIC.PREPARATION_RETURN) {
+                    // Fichier de retour préparation → on cherche une Sales Order
+                    transactionId = findSalesOrder(orderNumber);
+                        if (!transactionId) {
+                            errorMsg = 'Sales Order introuvable pour OrderNumber = ' + orderNumber;
+                        }
+                    } else if (topicId === INBOUND_TOPIC.RECEPTION_RETURN) {
+                    // Fichier d’attendu / réception → on cherche une Purchase Order
+                    transactionId = findPurchaseOrder(orderNumber);
+                        if (!transactionId) {
+                            errorMsg = 'Purchase Order introuvable pour OrderNumber = ' + orderNumber;
+                        }
                     }
                 }
 
@@ -333,19 +385,30 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
                     });
                 }
 
-                if (soId) {
+                if (transactionId) {
                     prepRec.setValue({
                         fieldId: 'custrecordwms_transaction',
-                        value: soId
+                        value: transactionId
                     });
                 }
 
+                var itemInternalId = null;
+
                 if (itemNumber) {
-                    prepRec.setValue({
-                        fieldId: 'custrecord_wms_item',
-                        value: itemNumber
-                    });
+                    itemInternalId = findItemByCode(itemNumber);
+
+                    if (itemInternalId) {
+                        // On stocke correctement l’article en sélectionnant la fiche article
+                        prepRec.setValue({
+                            fieldId: 'custrecord_wms_item',
+                            value: itemInternalId
+                        });
+                    } else {
+                        // L’article n'existe pas → ligne en erreur
+                        errorMsg = 'Article introuvable : ' + itemNumber;
+                    }
                 }
+
 
                 if (lotNumber) {
                     prepRec.setValue({
@@ -357,7 +420,7 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
                 if (lineNumberERP) {
                     prepRec.setValue({
                         fieldId: 'custrecord_wms_linenumber',
-                        value: lotNumber
+                        value: lineNumberERP
                     });
                 }
 
