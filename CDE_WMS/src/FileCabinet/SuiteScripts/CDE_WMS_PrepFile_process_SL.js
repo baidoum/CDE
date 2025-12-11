@@ -73,6 +73,19 @@ define(['N/search', 'N/record', 'N/log'], function (search, record, log) {
             var lotNumber = res.getValue({ name: 'custrecord_wms_lot_number' });
             var qtyRaw = res.getValue({ name: 'custrecord_wms_quantity' });
 
+            var soRec = record.load({
+                type: record.Type.SALES_ORDER,
+                id: soId
+            });
+
+            var soLocation = soRec.getValue({ fieldId: 'location' });
+            var soTranId   = soRec.getValue({ fieldId: 'tranid' });
+
+            if (!soLocation) {
+                // Ici tu peux aussi décider d’une location par défaut si tu préfères
+                throw new Error('Aucune location définie sur la commande client ' + soTranId + ' (id ' + soId + '). Impossible de créer le fulfilment.');
+            }
+
             var qty = qtyRaw ? parseFloat(qtyRaw) : 0;
 
             if (!soId || !itemId || !qty) {
@@ -139,6 +152,14 @@ define(['N/search', 'N/record', 'N/log'], function (search, record, log) {
                     toType: record.Type.ITEM_FULFILLMENT,
                     isDynamic: true
                 });
+
+                var ifLocation = ifRec.getValue({ fieldId: 'location' });
+                if (!ifLocation) {
+                    ifRec.setValue({
+                        fieldId: 'location',
+                        value: soLocation
+                    });
+                }
 
                 // Agrégation par Article + Lot
                 var grouped = {}; // key = itemId|lot
