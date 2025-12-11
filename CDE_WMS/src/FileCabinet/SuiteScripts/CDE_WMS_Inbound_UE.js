@@ -2,7 +2,7 @@
  * @NApiVersion 2.1
  * @NScriptType UserEventScript
  */
-define(['N/ui/serverWidget', 'N/url', 'N/log'], function (serverWidget, url, log) {
+define(['N/ui/serverWidget', 'N/log'], function (serverWidget, log) {
 
     function beforeLoad(context) {
         if (context.type !== context.UserEventType.VIEW) {
@@ -10,23 +10,16 @@ define(['N/ui/serverWidget', 'N/url', 'N/log'], function (serverWidget, url, log
         }
 
         var form = context.form;
-        var rec = context.newRecord;
 
         try {
-            var scriptId = 'customscript_cde_wms_prep_process_sl';     // adapter
-            var deployId = 'customdeploy_cde_wms_prep_process_sl';     // adapter
+            // On attache le client script
+            form.clientScriptModulePath = './CDE_WMS_PrepProcess_CS.js';
 
-            var suiteletUrl = url.resolveScript({
-                scriptId: scriptId,
-                deploymentId: deployId,
-                params: { inboundId: rec.id }
-            });
-
-            // AUCUN client script requis.
+            // Bouton qui appelle une fonction du client script
             form.addButton({
                 id: 'custpage_wms_prep_process',
                 label: 'Traiter la préparation WMS',
-                functionName: "window.location.href='" + suiteletUrl + "';"
+                functionName: 'cdeWmsProcessPrep'
             });
 
         } catch (e) {
