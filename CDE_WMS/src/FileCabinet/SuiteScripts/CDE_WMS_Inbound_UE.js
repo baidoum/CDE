@@ -5,25 +5,27 @@
 define(['N/ui/serverWidget', 'N/log'], function (serverWidget, log) {
 
     function beforeLoad(context) {
-        if (context.type !== context.UserEventType.VIEW) {
-            return;
-        }
-
-        var form = context.form;
-
         try {
-            // On attache le client script
-            form.clientScriptModulePath = './CDE_WMS_PrepProcess_CS.js';
+            if (context.type !== context.UserEventType.VIEW) {
+                return;
+            }
 
-            // Bouton qui appelle une fonction du client script
+            var form = context.form;
+            var rec  = context.newRecord;
+
+
+            form.clientScriptFileId = 7290;
+
+            // 2) Bouton qui appelle la fonction du client script
             form.addButton({
                 id: 'custpage_wms_prep_process',
                 label: 'Traiter la préparation WMS',
-                functionName: 'cdeWmsProcessPrep'
+                // on passe l’ID du inbound au client script
+                functionName: 'cdeWmsProcessPrep(' + rec.id + ')'
             });
 
         } catch (e) {
-            log.error('WMS PREP UE - beforeLoad error', e);
+            log.error('CDE_WMS_Inbound_UE beforeLoad error', e);
         }
     }
 

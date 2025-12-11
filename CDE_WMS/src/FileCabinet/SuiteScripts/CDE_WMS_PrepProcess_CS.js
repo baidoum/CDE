@@ -2,16 +2,17 @@
  * @NApiVersion 2.1
  * @NScriptType ClientScript
  */
-define(['N/currentRecord', 'N/log'], function (currentRecord, log) {
+define(['N/log'], function (log) {
 
-    function cdeWmsProcessPrep() {
+    function cdeWmsProcessPrep(inboundId) {
         try {
-            var rec = currentRecord.get();
-            var inboundId = rec.id;
+            if (!inboundId) {
+                alert("Impossible de déterminer l'ID du fichier inbound.");
+                return;
+            }
 
-            // URL de base du Suitelet (script / deploy connus)
+           
             var baseUrl = '/app/site/hosting/scriptlet.nl?script=979&deploy=1';
-
             var fullUrl = baseUrl + '&inboundId=' + encodeURIComponent(inboundId);
 
             log.debug('WMS PREP CS - redirect URL', fullUrl);
@@ -24,7 +25,13 @@ define(['N/currentRecord', 'N/log'], function (currentRecord, log) {
         }
     }
 
+    // entry point "officiel" pour satisfaire NetSuite (même vide)
+    function pageInit(context) {
+        // rien de spécial
+    }
+
     return {
+        pageInit: pageInit,
         cdeWmsProcessPrep: cdeWmsProcessPrep
     };
 });
