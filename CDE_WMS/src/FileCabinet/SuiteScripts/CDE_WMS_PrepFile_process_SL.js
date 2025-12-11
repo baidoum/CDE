@@ -27,10 +27,7 @@ define(['N/search', 'N/record', 'N/log'], function (search, record, log) {
         });
 
         var res = invSearch.run().getRange({ start: 0, end: 1 });
-        if (res && res.length > 0) {
-            return res[0].id;
-        }
-        return null;
+        return (res && res.length > 0) ? res[0].id : null;
     }
 
     function onRequest(context) {
@@ -68,23 +65,10 @@ define(['N/search', 'N/record', 'N/log'], function (search, record, log) {
         lineSearch.run().each(function (res) {
             var prepLineId = res.getValue({ name: 'internalid' });
 
-            var soId = res.getValue({ name: 'custrecordwms_transaction' });
-            var itemId = res.getValue({ name: 'custrecord_wms_item' });
+            var soId      = res.getValue({ name: 'custrecordwms_transaction' });
+            var itemId    = res.getValue({ name: 'custrecord_wms_item' });
             var lotNumber = res.getValue({ name: 'custrecord_wms_lot_number' });
-            var qtyRaw = res.getValue({ name: 'custrecord_wms_quantity' });
-
-            var soRec = record.load({
-                type: record.Type.SALES_ORDER,
-                id: soId
-            });
-
-            var soLocation = soRec.getValue({ fieldId: 'location' });
-            var soTranId   = soRec.getValue({ fieldId: 'tranid' });
-
-            if (!soLocation) {
-                // Ici tu peux aussi décider d’une location par défaut si tu préfères
-                throw new Error('Aucune location définie sur la commande client ' + soTranId + ' (id ' + soId + '). Impossible de créer le fulfilment.');
-            }
+            var qtyRaw    = res.getValue({ name: 'custrecord_wms_quantity' });
 
             var qty = qtyRaw ? parseFloat(qtyRaw) : 0;
 
@@ -137,22 +121,39 @@ define(['N/search', 'N/record', 'N/log'], function (search, record, log) {
         }
 
         var createdIFs = [];
-        var errors = [];
+        var errors     = [];
 
         // 2) Pour chaque Sales Order, créer un Item Fulfillment
         Object.keys(linesBySo).forEach(function (soId) {
             var soLines = linesBySo[soId];
 
             try {
+                // ---- Charger le SO pour récupérer la location ----
+                var soRec = record.load({
+                    type: record.Type.SALES_ORDER,
+                    id: soId
+                });
+
+                var soLocation = soRec.getValue({ fieldId: 'location' });
+                var soTranId   = soRec.getValue({ fieldId: 'tranid' });
+
+                if (!soLocation) {
+                    throw new Error(
+                        'Aucune location définie sur la commande client ' +
+                        soTranId + ' (id ' + soId + '). Impossible de créer le fulfilment.'
+                    );
+                }
+
                 log.audit('WMS PREP PROCESS - transform SO', { soId: soId });
 
                 var ifRec = record.transform({
                     fromType: record.Type.SALES_ORDER,
-                    fromId: soId,
-                    toType: record.Type.ITEM_FULFILLMENT,
+                    fromId:   soId,
+                    toType:   record.Type.ITEM_FULFILLMENT,
                     isDynamic: true
                 });
 
+                // Si la location n’est pas renseignée sur l’IF, on force celle du SO
                 var ifLocation = ifRec.getValue({ fieldId: 'location' });
                 if (!ifLocation) {
                     ifRec.setValue({
@@ -161,7 +162,7 @@ define(['N/search', 'N/record', 'N/log'], function (search, record, log) {
                     });
                 }
 
-                // Agrégation par Article + Lot
+                // ---- Agrégation par Article + Lot ----
                 var grouped = {}; // key = itemId|lot
                 soLines.forEach(function (l) {
                     var key = l.itemId + '|' + (l.lotNumber || '');
