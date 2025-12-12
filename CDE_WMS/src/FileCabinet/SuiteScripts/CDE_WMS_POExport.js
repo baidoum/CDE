@@ -374,7 +374,7 @@ define([
                         CCOrderNumber:           '',
                         CCLineNumber:            '',
                         ItemSuffixe:             '',
-                        ItemDescription:         itemDescription,
+                        ItemDescription:         itemDisplay,
                         ItemVariante:            '',
                         PrixUnitaireNet:         '',
                         SiteERP:                 'AXELIS',
@@ -403,7 +403,7 @@ define([
                 // CAS 2 : pas de lots → une ligne par ligne de commande
                 var lineDataSingle = {
                     LineNumber:              lineNumber,
-                    ItemNumber:              itemDisplay,
+                    ItemNumber:              itemCode,
                     OrderedQuantity:         qty,
                     Comment:                 headerData.memo,
                     VendorName:              headerData.VendorName,
@@ -419,7 +419,7 @@ define([
                     CCOrderNumber:           '',
                     CCLineNumber:            '',
                     ItemSuffixe:             '',
-                    ItemDescription:         itemDescription,
+                    ItemDescription:         itemDisplay,
                     ItemVariante:            '',
                     PrixUnitaireNet:         '',
                     SiteERP:                 '',
