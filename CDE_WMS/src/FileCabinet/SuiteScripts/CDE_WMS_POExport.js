@@ -256,7 +256,8 @@ define([
             TypeDocument:   'PO',                                                                    // Type document ERP
             NumeroContainer: poRec.getValue({ fieldId: 'custbody_cde_container_no' }) || '',        // custom
             //CAOrderNumberHeader: poRec.getValue({ fieldId: 'tranid' }) || '',                       // CAOrderNumber entête
-            VendorOrderNumber:    poRec.getValue({ fieldId: 'otherrefnum' }) || ''                  // Numéro commande fournisseur
+            VendorOrderNumber:    poRec.getValue({ fieldId: 'otherrefnum' }) || '',                 // Numéro commande fournisseur
+            memo:    poRec.getValue({ fieldId: 'memo' }) || ''                  // commentaire
         };
 
         for (var i = 0; i < lineCount; i++) {
@@ -302,9 +303,9 @@ define([
                 line: i
             });
 
-            var lineMemo = poRec.getSublistValue({
+            var description = poRec.getSublistValue({
                 sublistId: 'item',
-                fieldId: 'memo',
+                fieldId: 'description',
                 line: i
             });
 
@@ -314,7 +315,7 @@ define([
                 line: i
             });
 
-            var itemDescription = lineMemo || '';
+            var itemDescription = description || '';
             var itemVariante    = '';
 
             var invDetail = null;
@@ -359,29 +360,29 @@ define([
                         LineNumber:              lineNumber,
                         ItemNumber:              itemCode,
                         OrderedQuantity:         lotQty,
-                        Comment:                 lineMemo,
+                        Comment:                 memo,
                         VendorName:              headerData.VendorName,
                         UnitOfMeasure:           uom,
-                        SoucheOrderERP:          headerData.SoucheOrderERP,
-                        OrderType:               headerData.OrderType,
-                        TypeDocument:            headerData.TypeDocument,
-                        NumeroContainer:         headerData.NumeroContainer,
-                        CAOrderNumberLine:       headerData.CAOrderNumberHeader,
-                        CALineNumber:            lineNumber,
+                        SoucheOrderERP:          '',
+                        OrderType:               '_STK',
+                        TypeDocument:            '',
+                        NumeroContainer:         '',
+                        CAOrderNumberLine:       '',
+                        CALineNumber:            '',
                         ReferenceFournisseur:    '',
                         ReferenceExterne:        '',
                         CCOrderNumber:           '',
                         CCLineNumber:            '',
                         ItemSuffixe:             '',
                         ItemDescription:         itemDescription,
-                        ItemVariante:            itemVariante,
+                        ItemVariante:            '',
                         PrixUnitaireNet:         '',
-                        SiteERP:                 '',
-                        CAOrderNumberHeader:     headerData.CAOrderNumberHeader,
+                        SiteERP:                 'AXELIS',
+                        CAOrderNumberHeader:     '',
                         VendorShippingOrderNumber: '',
                         VendorShippingLineNumber:  '',
                         CodeSociete:             '',
-                        VendorOrderNumber:       headerData.VendorOrderNumber,
+                        VendorOrderNumber:       '',
                         LotNumber:               lotNumber,
                         LineNumberERP:           lineNumber,
                         Indice:                  '',
@@ -404,14 +405,14 @@ define([
                     LineNumber:              lineNumber,
                     ItemNumber:              itemDisplay,
                     OrderedQuantity:         qty,
-                    Comment:                 lineMemo,
+                    Comment:                 memo,
                     VendorName:              headerData.VendorName,
                     UnitOfMeasure:           uom,
                     SoucheOrderERP:          headerData.SoucheOrderERP,
-                    OrderType:               headerData.OrderType,
-                    TypeDocument:            headerData.TypeDocument,
-                    NumeroContainer:         headerData.NumeroContainer,
-                    CAOrderNumberLine:       headerData.CAOrderNumberHeader,
+                    OrderType:               '_STK',
+                    TypeDocument:            '',
+                    NumeroContainer:         '',
+                    CAOrderNumberLine:       '',
                     CALineNumber:            lineNumber,
                     ReferenceFournisseur:    '',
                     ReferenceExterne:        '',
@@ -419,14 +420,14 @@ define([
                     CCLineNumber:            '',
                     ItemSuffixe:             '',
                     ItemDescription:         itemDescription,
-                    ItemVariante:            itemVariante,
+                    ItemVariante:            '',
                     PrixUnitaireNet:         '',
                     SiteERP:                 '',
-                    CAOrderNumberHeader:     headerData.CAOrderNumberHeader,
+                    CAOrderNumberHeader:     '',
                     VendorShippingOrderNumber: '',
                     VendorShippingLineNumber:  '',
                     CodeSociete:             '',
-                    VendorOrderNumber:       headerData.VendorOrderNumber,
+                    VendorOrderNumber:       '',
                     LotNumber:               '',
                     LineNumberERP:           lineNumber,
                     Indice:                  '',
