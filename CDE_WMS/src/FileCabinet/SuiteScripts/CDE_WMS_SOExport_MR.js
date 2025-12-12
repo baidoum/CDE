@@ -252,7 +252,8 @@ define([
             OrderNumber:    soRec.getValue({ fieldId: 'tranid' }) || '',
             OrderDate:      formatDateYYYYMMDD(soRec.getValue({ fieldId: 'trandate' })),
             DueDate:        formatDateYYYYMMDD(soRec.getValue({ fieldId: 'shipdate' })) || formatDateYYYYMMDD(soRec.getValue({ fieldId: 'trandate' })) ,
-            Commentaire:    soRec.getValue({ fieldId: 'custbody_cde_logistic_comment' }) || '',
+            Commentaire:    soRec.getValue({ fieldId: 'memo' }) || '',
+            CommentaireLogistique:    soRec.getValue({ fieldId: 'custbody_cde_logistic_comment' }) || '',
 
             CustomerBillTo: soRec.getValue({ fieldId: 'entity' }) || '',
             CBTCompanyName: addr.billaddressee || '',
