@@ -124,6 +124,12 @@ define([
           displayname: itemRec.getValue({ fieldId: 'displayname' }),
           islotitem: itemRec.getValue({ fieldId: 'islotitem' }),
           type: itemRec.type,
+          description4: itemRec.getValue({fieldId: 'purchasedescription'}),
+          UOM: itemRec.getValue({fieldId: 'stockunit'}),
+          cost: itemRec.getValue({fieldId: 'cost'}),
+          manufacturer: itemRec.getValue({fieldId: 'manufacturer'}),
+          
+          
           // à enrichir plus tard avec tous les champs de mapping vers Pixi
         };
 
@@ -254,6 +260,9 @@ if (!res.success) {
         case 'Description':
           return sanitizeValue(p.displayname);
 
+        case 'Description4': 
+          return (p.description4)
+
         case 'UsesLot':
           return (p.islotitem === true || p.islotitem === 'T' || p.islotitem === 1) ? '1' : '0';
 
@@ -279,7 +288,7 @@ if (!res.success) {
           return '1';
 
         case 'UnitOfMeasure':
-          return sanitizeValue(p.uom);
+          return sanitizeValue(p.UOM || '');
 
         case 'Status':
           // ex: actif par défaut
@@ -289,7 +298,67 @@ if (!res.success) {
           return sanitizeValue(p.itemid);
 
         case 'Type':
-          return sanitizeValue(p.type || '');
+          return '';
+
+        case 'Kit':
+          return '0';
+
+        case 'GestionERP':
+          return '1';
+
+        case 'VendorID':
+          return p.manufacturer;
+
+        case 'EachCount':
+          return '1';
+
+        case 'UnitCost':
+          return p.cost;
+
+        case 'cube':
+          return '0';
+        case 'Weight':
+          return '0';
+        case 'GrossWeight':
+          return '0';
+        case 'Largeur':
+          return '0';
+        case 'Hauteur':
+          return '0';
+        case 'SerialNoPicking':
+          return '0';
+        case 'Itm_SurPrepPourcent':
+          return '0';
+        case 'Itm_SurRecepPourcent':
+          return '0';
+        case 'UsesCarton':
+          return '0';
+        case 'Itm_SerialLuhn':
+          return '0';
+        case 'UsesPoidsVariable':
+          return '0';
+        case 'IUOM_Receiving':
+          return '1';
+        case 'IUOM_Picking':
+          return '1';
+        case 'IUOM_Inventory':
+          return '1';
+        case 'Contrat Date':
+          return '0';
+        case 'TolerancePoidsVariable':
+          return '0';
+        case 'Gerbable':
+          return '1';
+        case 'Type Palette':
+          return '0';
+        case 'Contrôle Classe':
+          return '0';
+        case 'PourcentContenu':
+          return '0';
+        case 'Libellé Unité de Mesure':
+          return  sanitizeValue(p.UOM || '');;
+
+
 
         default:
           return '';
