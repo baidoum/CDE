@@ -392,7 +392,7 @@ define([], function () {
                 // [TOPIC.TRANSFER]: 'TRA' // Transferts
             };
 
-            const OWNER_CODE = 'XXXXXX';  // Code du donneur d’ordre → à rendre paramétrable plus tard
+            const OWNER_CODE = 'LCDE';  // Code du donneur d’ordre → à rendre paramétrable plus tard
             const EXTENSION  = '.csv';
             const timestamp  = formatTimestamp(new Date());
 
