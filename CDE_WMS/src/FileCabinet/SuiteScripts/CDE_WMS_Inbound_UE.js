@@ -4,6 +4,12 @@
  */
 define(['N/ui/serverWidget', 'N/log'], function (serverWidget, log) {
 
+    // ⚠️ Adapter les valeurs aux internal IDs de ta liste "WMS Inbound Topic"
+    var INBOUND_TOPIC = {
+        PREPARATION: '1', // retour préparation (SO)
+        RECEPTION:   '2'  // retour réception (PO)
+    };
+
     function beforeLoad(context) {
         try {
             if (context.type !== context.UserEventType.VIEW) {
@@ -13,25 +19,40 @@ define(['N/ui/serverWidget', 'N/log'], function (serverWidget, log) {
             var form = context.form;
             var rec  = context.newRecord;
 
-            // On utilise l'ID du Client Script, exactement comme ton script initial
+            // Client Script (identique à ton script existant)
             form.clientScriptFileId = 7290; // CDE_WMS_Inbound_CS.js
 
-            // --- Bouton pour traiter la préparation (Sales Orders → Item Fulfillment) ---
-            form.addButton({
-                id: 'custpage_wms_prep_process',
-                label: 'Traiter la préparation WMS',
-                functionName: 'cdeWmsProcessPrep(' + rec.id + ')'
+            var inboundId = rec.id;
+            var topic     = rec.getValue({ fieldId: 'custrecord_wms_in_topic' });
+
+            log.debug('Inbound UE', {
+                inboundId: inboundId,
+                topic: topic
             });
 
-            // --- Bouton pour traiter la réception (Purchase Orders → Item Receipt) ---
-            form.addButton({
-                id: 'custpage_wms_receipt_process',
-                label: 'Traiter la réception WMS',
-                functionName: 'cdeWmsProcessReceipt(' + rec.id + ')'
-            });
+            // --- Préparation : Sales Order → Item Fulfillment ---
+            if (topic === INBOUND_TOPIC.PREPARATION) {
+                form.addButton({
+                    id: 'custpage_wms_prep_process',
+                    label: 'Traiter la préparation WMS',
+                    functionName: 'cdeWmsProcessPrep(' + inboundId + ')'
+                });
+            }
+
+            // --- Réception : Purchase Order → Item Receipt ---
+            if (topic === INBOUND_TOPIC.RECEPTION) {
+                form.addButton({
+                    id: 'custpage_wms_receipt_process',
+                    label: 'Traiter la réception WMS',
+                    functionName: 'cdeWmsProcessReceipt(' + inboundId + ')'
+                });
+            }
 
         } catch (e) {
-            log.error('CDE_WMS_Inbound_UE beforeLoad error', e);
+            log.error('CDE_WMS_Inbound_UE beforeLoad error', {
+                message: e.message,
+                stack: e.stack
+            });
         }
     }
 
