@@ -14,7 +14,7 @@ define([], function () {
             return;
         }
 
-        var url = '/app/site/hosting/scriptlet.nl?script=XXXX&deploy=1&inboundId=' + inboundId;
+        var url = '/app/site/hosting/scriptlet.nl?script=979&deploy=1&inboundId=' + inboundId;
         window.location.href = url;
     }
 
@@ -28,7 +28,7 @@ define([], function () {
             return;
         }
 
-        var url = '/app/site/hosting/scriptlet.nl?script=YYYY&deploy=1&inboundId=' + inboundId;
+        var url = '/app/site/hosting/scriptlet.nl?script=981&deploy=1&inboundId=' + inboundId;
         window.location.href = url;
     }
 
