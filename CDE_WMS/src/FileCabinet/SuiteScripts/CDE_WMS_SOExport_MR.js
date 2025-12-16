@@ -255,7 +255,7 @@ define([
             Commentaire:    soRec.getValue({ fieldId: 'memo' }) || '',
             CommentaireLogistique:    soRec.getValue({ fieldId: 'custbody_cde_logistic_comment' }) || '',
 
-            CustomerBillTo: soRec.getValue({ fieldId: 'entity' }) || '',
+            CustomerBillTo: soRec.getText({ fieldId: 'entity' }) || '',
             CBTCompanyName: addr.billaddressee || '',
             CBTAddress1:    addr.billaddress1  || '',
             CBTAddress2:    addr.billaddress2  || '',
@@ -268,7 +268,7 @@ define([
             CBTVoicePhone:  '',
             CBTEmail:       soRec.getValue({ fieldId: 'custbody_cde_billto_email' }) || '',
 
-            CustomerShipTo: soRec.getValue({ fieldId: 'entity' }) || '',
+            CustomerShipTo: soRec.getText({ fieldId: 'entity' }) || '',
             CSTCompanyName: addr.shipaddressee || '',
             CSTAddress1:    addr.shipaddress1  || '',
             CSTAddress2:    addr.shipaddress2  || '',
