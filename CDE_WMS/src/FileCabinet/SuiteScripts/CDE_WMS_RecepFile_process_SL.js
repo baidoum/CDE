@@ -4,326 +4,282 @@
  */
 define(['N/search', 'N/record', 'N/log'], function (search, record, log) {
 
-    var REC_PREP_LINE = 'customrecord_cde_wms_prep_line';
+  var REC_LINE = 'customrecord_cde_wms_prep_line';
 
-    // Adapter ces IDs à ta liste WMS Line Status
-    var LINE_STATUS = {
-        NEW:   '1',
-        ERROR: '2',
-        DONE:  '3'   // à créer dans ta liste si pas encore présent
-    };
+  // Adapter ces IDs à ta liste WMS Line Status
+  var LINE_STATUS = {
+    NEW:   '1',
+    ERROR: '2',
+    DONE:  '3'
+  };
 
-    /**
-     * Retourne l'internalid de inventorynumber pour un couple (item, lot)
-     */
-    function findInventoryNumberId(itemId, lotNumber) {
-        if (!itemId || !lotNumber) return null;
+  // -----------------------------
+  // Helpers
+  // -----------------------------
 
-        var invSearch = search.create({
-            type: 'inventorynumber',
-            filters: [
-                ['item', 'anyof', itemId],
-                'AND',
-                ['inventorynumber', 'is', lotNumber]
-            ],
-            columns: ['internalid']
-        });
+  function toNumber(raw) {
+    if (raw === null || raw === undefined || raw === '') return 0;
+    var n = parseFloat(String(raw).replace(',', '.'));
+    return isFinite(n) ? n : 0;
+  }
 
-        var res = invSearch.run().getRange({ start: 0, end: 1 });
-        if (res && res.length > 0) {
-            return res[0].id;
-        }
-        return null;
+  function markLine(prepLineId, status, msg) {
+    var values = { custrecord_wms_line_status: status };
+    if (msg) values.custrecord_wms_error_mess = String(msg).substring(0, 1000);
+
+    record.submitFields({
+      type: REC_LINE,
+      id: prepLineId,
+      values: values,
+      options: { ignoreMandatoryFields: true }
+    });
+  }
+
+  function groupLinesByItemAndLot(lines) {
+    var grouped = {}; // key itemId|lot
+    lines.forEach(function (l) {
+      var key = String(l.itemId) + '|' + String(l.lotNumber || '');
+      if (!grouped[key]) {
+        grouped[key] = {
+          itemId: l.itemId,
+          lotNumber: l.lotNumber || '',
+          qty: 0,
+          prepLines: []
+        };
+      }
+      grouped[key].qty += l.qty;
+      grouped[key].prepLines.push(l.prepLineId);
+    });
+    return grouped;
+  }
+
+  function clearInventoryAssignments(invDetailSubrec) {
+    if (!invDetailSubrec) return;
+    var count = invDetailSubrec.getLineCount({ sublistId: 'inventoryassignment' }) || 0;
+    for (var i = count - 1; i >= 0; i--) {
+      invDetailSubrec.removeLine({
+        sublistId: 'inventoryassignment',
+        line: i,
+        ignoreRecalc: true
+      });
+    }
+  }
+
+  function isLotNumberedItem(itemId) {
+    // Petit lookup pour savoir si l’article est lot-numbered (utile si le lot n’est pas fourni)
+    // ⚠️ Pas obligatoire, mais permet de générer une erreur plus claire.
+    var s = search.create({
+      type: search.Type.ITEM,
+      filters: [['internalid', 'anyof', itemId]],
+      columns: ['islotitem']
+    });
+    var res = s.run().getRange({ start: 0, end: 1 });
+    if (res && res.length) {
+      var v = res[0].getValue({ name: 'islotitem' });
+      return (v === true || v === 'T');
+    }
+    return false;
+  }
+
+  // -----------------------------
+  // Suitelet
+  // -----------------------------
+
+  function onRequest(context) {
+    var inboundId = context.request.parameters.inboundId;
+    if (!inboundId) {
+      context.response.write('Paramètre inboundId manquant.');
+      return;
     }
 
-    function onRequest(context) {
-        var request = context.request;
-        var response = context.response;
+    log.audit('WMS RECEIPT PROCESS - start', { inboundId: inboundId });
 
-        var inboundId = request.parameters.inboundId;
-        if (!inboundId) {
-            response.write('Paramètre inboundId manquant.');
-            return;
-        }
+    // 1) Charger les lignes NEW pour ce inbound
+    var linesByPo = {};
+    var totalLines = 0;
 
-        log.audit('WMS RECEIPT PROCESS - start', { inboundId: inboundId });
+    var lineSearch = search.create({
+      type: REC_LINE,
+      filters: [
+        ['custrecordwms_prep_parent_file', 'anyof', inboundId],
+        'AND',
+        ['custrecord_wms_line_status', 'anyof', LINE_STATUS.NEW]
+      ],
+      columns: [
+        'internalid',
+        'custrecordwms_transaction',     // PO internalid
+        'custrecord_wms_item',           // Item internalid (List/Record Item)
+        'custrecord_wms_lot_number',     // Lot (texte)
+        'custrecord_wms_quantity'        // Qty
+      ]
+    });
 
-        // 1) Récupérer les lignes de préparation NON en erreur pour ce fichier
-        var linesByPo = {}; // poId -> [obj lignes]
-        var totalLines = 0;
+    lineSearch.run().each(function (res) {
+      var prepLineId = res.getValue({ name: 'internalid' });
+      var poId = res.getValue({ name: 'custrecordwms_transaction' });
+      var itemId = res.getValue({ name: 'custrecord_wms_item' });
+      var lotNumber = (res.getValue({ name: 'custrecord_wms_lot_number' }) || '').trim();
+      var qty = toNumber(res.getValue({ name: 'custrecord_wms_quantity' }));
 
-        var lineSearch = search.create({
-            type: REC_PREP_LINE,
-            filters: [
-                ['custrecordwms_prep_parent_file', 'anyof', inboundId],
-                'AND',
-                ['custrecord_wms_line_status', 'anyof', LINE_STATUS.NEW]
-            ],
-            columns: [
-                'internalid',
-                'custrecordwms_transaction',     // PO
-                'custrecord_wms_item',          // item internalid
-                'custrecord_wms_lot_number',    // lot
-                'custrecord_wms_quantity'       // qty
-            ]
-        });
+      if (!poId || !itemId || !qty) {
+        var msg = 'Données insuffisantes (poId=' + poId + ', itemId=' + itemId + ', qty=' + qty + ')';
+        log.error('WMS RECEIPT - missing data', { prepLineId: prepLineId, msg: msg });
+        markLine(prepLineId, LINE_STATUS.ERROR, msg);
+        return true;
+      }
 
-        lineSearch.run().each(function (res) {
-            var prepLineId = res.getValue({ name: 'internalid' });
+      if (!linesByPo[poId]) linesByPo[poId] = [];
+      linesByPo[poId].push({ prepLineId: prepLineId, itemId: itemId, lotNumber: lotNumber, qty: qty });
 
-            var poId      = res.getValue({ name: 'custrecordwms_transaction' });
-            var itemId    = res.getValue({ name: 'custrecord_wms_item' });
-            var lotNumber = res.getValue({ name: 'custrecord_wms_lot_number' });
-            var qtyRaw    = res.getValue({ name: 'custrecord_wms_quantity' });
+      totalLines++;
+      return true;
+    });
 
-            var qty = qtyRaw ? parseFloat(qtyRaw) : 0;
+    log.audit('WMS RECEIPT PROCESS - lines loaded', {
+      inboundId: inboundId,
+      poCount: Object.keys(linesByPo).length,
+      totalLines: totalLines
+    });
 
-            if (!poId || !itemId || !qty) {
-                // si info critique manquante, on passe la ligne en erreur
-                var msg = 'Données insuffisantes (poId=' + poId + ', itemId=' + itemId + ', qty=' + qty + ')';
-
-                log.error('WMS RECEIPT PROCESS - missing data', {
-                    prepLineId: prepLineId,
-                    message: msg
-                });
-
-                record.submitFields({
-                    type: REC_PREP_LINE,
-                    id: prepLineId,
-                    values: {
-                        custrecord_wms_line_status: LINE_STATUS.ERROR,
-                        custrecord_wms_error_mess: msg
-                    },
-                    options: { ignoreMandatoryFields: true }
-                });
-
-                return true; // continuer la boucle search
-            }
-
-            if (!linesByPo[poId]) {
-                linesByPo[poId] = [];
-            }
-
-            linesByPo[poId].push({
-                prepLineId: prepLineId,
-                itemId: itemId,
-                lotNumber: lotNumber || '',
-                qty: qty
-            });
-
-            totalLines++;
-            return true;
-        });
-
-        log.audit('WMS RECEIPT PROCESS - lines loaded', {
-            inboundId: inboundId,
-            poCount: Object.keys(linesByPo).length,
-            totalLines: totalLines
-        });
-
-        if (totalLines === 0) {
-            response.write('Aucune ligne NEW à traiter pour ce fichier (PO).');
-            return;
-        }
-
-        var createdIRs = [];
-        var errors = [];
-
-        // 2) Pour chaque Purchase Order, créer un Item Receipt
-        Object.keys(linesByPo).forEach(function (poId) {
-            var poLines = linesByPo[poId];
-
-            try {
-                log.audit('WMS RECEIPT PROCESS - transform PO', { poId: poId });
-
-                // Charger le PO pour récupérer la location
-                var poRec = record.load({
-                    type: record.Type.PURCHASE_ORDER,
-                    id: poId
-                });
-                var poLocation = poRec.getValue({ fieldId: 'location' });
-                var poTranId   = poRec.getValue({ fieldId: 'tranid' });
-
-                if (!poLocation) {
-                    throw new Error('Aucune location définie sur la commande achat ' + poTranId +
-                        ' (id ' + poId + '). Impossible de créer la réception.');
-                }
-
-                var irRec = record.transform({
-                    fromType: record.Type.PURCHASE_ORDER,
-                    fromId: poId,
-                    toType: record.Type.ITEM_RECEIPT,
-                    isDynamic: true
-                });
-
-                // S’assurer que la location est bien positionnée sur l’Item Receipt
-                var irLocation = irRec.getValue({ fieldId: 'location' });
-                if (!irLocation) {
-                    irRec.setValue({
-                        fieldId: 'location',
-                        value: poLocation
-                    });
-                }
-
-                // Agrégation par Article + Lot
-                var grouped = {}; // key = itemId|lot
-                poLines.forEach(function (l) {
-                    var key = l.itemId + '|' + (l.lotNumber || '');
-                    if (!grouped[key]) {
-                        grouped[key] = {
-                            itemId: l.itemId,
-                            lotNumber: l.lotNumber || '',
-                            qty: 0,
-                            prepLines: []
-                        };
-                    }
-                    grouped[key].qty += l.qty;
-                    grouped[key].prepLines.push(l.prepLineId);
-                });
-
-                var lineCount = irRec.getLineCount({ sublistId: 'item' });
-
-                // Pour chaque groupe (item + lot), on cherche la ligne correspondante dans l'IR
-                Object.keys(grouped).forEach(function (key) {
-                    var g = grouped[key];
-
-                    for (var i = 0; i < lineCount; i++) {
-                        var currItemId = irRec.getSublistValue({
-                            sublistId: 'item',
-                            fieldId: 'item',
-                            line: i
-                        });
-
-                        if (String(currItemId) !== String(g.itemId)) {
-                            continue;
-                        }
-
-                        // On a trouvé une ligne d'IR pour cet article
-                        irRec.selectLine({
-                            sublistId: 'item',
-                            line: i
-                        });
-
-                        // Marquer la ligne à réceptionner
-                        irRec.setCurrentSublistValue({
-                            sublistId: 'item',
-                            fieldId: 'itemreceive',
-                            value: true
-                        });
-
-                        irRec.setCurrentSublistValue({
-                            sublistId: 'item',
-                            fieldId: 'quantity',
-                            value: g.qty
-                        });
-
-                        // Gestion du lot si présent
-                        if (g.lotNumber) {
-                            try {
-                                var invDetail = irRec.getCurrentSublistSubrecord({
-                                    sublistId: 'item',
-                                    fieldId: 'inventorydetail'
-                                });
-
-                                var lotId = findInventoryNumberId(g.itemId, g.lotNumber);
-
-                                if (!lotId) {
-                                    log.error('WMS RECEIPT PROCESS - lot introuvable', {
-                                        poId: poId,
-                                        itemId: g.itemId,
-                                        lotNumber: g.lotNumber
-                                    });
-                                } else {
-                                    invDetail.selectNewLine({
-                                        sublistId: 'inventoryassignment'
-                                    });
-                                    invDetail.setCurrentSublistValue({
-                                        sublistId: 'inventoryassignment',
-                                        fieldId: 'receiptinventorynumber', // différent de l’IF
-                                        value: lotId
-                                    });
-                                    invDetail.setCurrentSublistValue({
-                                        sublistId: 'inventoryassignment',
-                                        fieldId: 'quantity',
-                                        value: g.qty
-                                    });
-                                    invDetail.commitLine({
-                                        sublistId: 'inventoryassignment'
-                                    });
-                                }
-                            } catch (eInv) {
-                                log.error('WMS RECEIPT PROCESS - inventorydetail error', {
-                                    poId: poId,
-                                    itemId: g.itemId,
-                                    lotNumber: g.lotNumber,
-                                    error: eInv.message
-                                });
-                            }
-                        }
-
-                        irRec.commitLine({
-                            sublistId: 'item'
-                        });
-
-                        break; // on arrête dès qu'on a trouvé une ligne pour cet article
-                    }
-                });
-
-                var irId = irRec.save({
-                    enableSourcing: true,
-                    ignoreMandatoryFields: false
-                });
-
-                createdIRs.push(irId);
-
-                // 3) Mettre à jour les lignes WMS comme DONE
-                Object.keys(grouped).forEach(function (key) {
-                    var g = grouped[key];
-                    g.prepLines.forEach(function (prepId) {
-                        record.submitFields({
-                            type: REC_PREP_LINE,
-                            id: prepId,
-                            values: {
-                                custrecord_wms_line_status: LINE_STATUS.DONE
-                            },
-                            options: { ignoreMandatoryFields: true }
-                        });
-                    });
-                });
-
-                log.audit('WMS RECEIPT PROCESS - IR created', {
-                    poId: poId,
-                    irId: irId
-                });
-
-            } catch (e) {
-                log.error('WMS RECEIPT PROCESS - error for PO', {
-                    poId: poId,
-                    error: e.message,
-                    stack: e.stack
-                });
-
-                errors.push({
-                    poId: poId,
-                    message: e.message
-                });
-            }
-        });
-
-        // 4) Résumé dans la réponse
-        var msg = 'Item Receipts créés : ' + (createdIRs.join(', ') || 'aucun') +
-                  '. Erreurs : ' + (errors.length ? JSON.stringify(errors) : 'aucune');
-
-        log.audit('WMS RECEIPT PROCESS - end', {
-            inboundId: inboundId,
-            createdIRs: createdIRs,
-            errors: errors
-        });
-
-        response.write(msg);
+    if (!totalLines) {
+      context.response.write('Aucune ligne NEW à traiter pour ce fichier (PO).');
+      return;
     }
 
-    return {
-        onRequest: onRequest
-    };
+    var createdIRs = [];
+    var errors = [];
+
+    // 2) Pour chaque PO, transformer en Item Receipt
+    Object.keys(linesByPo).forEach(function (poId) {
+      var poLines = linesByPo[poId];
+
+      try {
+        log.audit('WMS RECEIPT - transform PO', { poId: poId, lines: poLines.length });
+
+        // Charger PO pour location + tranid
+        var poRec = record.load({ type: record.Type.PURCHASE_ORDER, id: poId });
+        var poLocation = poRec.getValue({ fieldId: 'location' });
+        var poTranId = poRec.getValue({ fieldId: 'tranid' });
+
+        if (!poLocation) {
+          throw new Error('Aucune location sur PO ' + poTranId + ' (id ' + poId + ')');
+        }
+
+        var irRec = record.transform({
+          fromType: record.Type.PURCHASE_ORDER,
+          fromId: poId,
+          toType: record.Type.ITEM_RECEIPT,
+          isDynamic: true
+        });
+
+        // forcer location si vide
+        if (!irRec.getValue({ fieldId: 'location' })) {
+          irRec.setValue({ fieldId: 'location', value: poLocation });
+        }
+
+        // Agrégation
+        var grouped = groupLinesByItemAndLot(poLines);
+
+        var irLineCount = irRec.getLineCount({ sublistId: 'item' });
+        var touchedPrepLines = []; // à passer en DONE si succès
+
+        // Traitement de chaque groupe
+        Object.keys(grouped).forEach(function (key) {
+          var g = grouped[key];
+
+          // trouver la ligne IR correspondante à l'article
+          var found = false;
+
+          for (var i = 0; i < irLineCount; i++) {
+            var currItemId = irRec.getSublistValue({ sublistId: 'item', fieldId: 'item', line: i });
+            if (String(currItemId) !== String(g.itemId)) continue;
+
+            found = true;
+
+            irRec.selectLine({ sublistId: 'item', line: i });
+
+            irRec.setCurrentSublistValue({ sublistId: 'item', fieldId: 'itemreceive', value: true });
+            irRec.setCurrentSublistValue({ sublistId: 'item', fieldId: 'quantity', value: g.qty });
+
+            // Lot handling
+            var needsLot = isLotNumberedItem(g.itemId);
+            if (needsLot && !g.lotNumber) {
+              // lot requis mais absent => erreur de ligne
+              var msgLotMissing = 'Lot requis mais non fourni (item ' + g.itemId + ')';
+              log.error('WMS RECEIPT - lot missing', { poId: poId, itemId: g.itemId, msg: msgLotMissing });
+              g.prepLines.forEach(function (pid) { markLine(pid, LINE_STATUS.ERROR, msgLotMissing); });
+              // On n'ajoute pas ce groupe à l'IR
+              irRec.setCurrentSublistValue({ sublistId: 'item', fieldId: 'itemreceive', value: false });
+              irRec.commitLine({ sublistId: 'item' });
+              return;
+            }
+
+            if (g.lotNumber) {
+              var invDetail = irRec.getCurrentSublistSubrecord({ sublistId: 'item', fieldId: 'inventorydetail' });
+
+              // Nettoyage des assignments existants pour éviter "inventory detail not configured"
+              clearInventoryAssignments(invDetail);
+
+              invDetail.selectNewLine({ sublistId: 'inventoryassignment' });
+
+              // ✅ En réception: renseigner le lot par TEXT
+              invDetail.setCurrentSublistText({
+                sublistId: 'inventoryassignment',
+                fieldId: 'receiptinventorynumber',
+                text: g.lotNumber
+              });
+
+              invDetail.setCurrentSublistValue({
+                sublistId: 'inventoryassignment',
+                fieldId: 'quantity',
+                value: g.qty
+              });
+
+              invDetail.commitLine({ sublistId: 'inventoryassignment' });
+            }
+
+            irRec.commitLine({ sublistId: 'item' });
+
+            // on marque ces prep lines comme "touchées", à passer en DONE si save OK
+            touchedPrepLines = touchedPrepLines.concat(g.prepLines);
+
+            break;
+          }
+
+          if (!found) {
+            var msgNotFound = 'Article non trouvé dans l’Item Receipt (itemId=' + g.itemId + ')';
+            log.error('WMS RECEIPT - item not found in IR', { poId: poId, msg: msgNotFound });
+            g.prepLines.forEach(function (pid) { markLine(pid, LINE_STATUS.ERROR, msgNotFound); });
+          }
+        });
+
+        // Sauvegarde IR
+        var irId = irRec.save({ enableSourcing: true, ignoreMandatoryFields: false });
+        createdIRs.push(irId);
+
+        // Passer les lignes touchées en DONE
+        touchedPrepLines.forEach(function (pid) {
+          // ⚠️ si déjà ERROR (cas lot missing/item not found), on ne l’écrase pas
+          // => on relit le statut ? on évite pour rester simple.
+          // Hypothèse: touchedPrepLines n’inclut que les groupes traités avec succès.
+          markLine(pid, LINE_STATUS.DONE);
+        });
+
+        log.audit('WMS RECEIPT - IR created', { poId: poId, irId: irId });
+
+      } catch (e) {
+        log.error('WMS RECEIPT - error for PO', { poId: poId, error: e.message, stack: e.stack });
+        errors.push({ poId: poId, message: e.message });
+      }
+    });
+
+    var msg = 'Item Receipts créés : ' + (createdIRs.join(', ') || 'aucun') +
+              '. Erreurs : ' + (errors.length ? JSON.stringify(errors) : 'aucune');
+
+    log.audit('WMS RECEIPT PROCESS - end', { inboundId: inboundId, createdIRs: createdIRs, errors: errors });
+
+    context.response.write(msg);
+  }
+
+  return { onRequest: onRequest };
 });
