@@ -582,8 +582,14 @@ define([
     }
 
     function getOutputFolderId() {
-        var script = runtime.getCurrentScript();
-        return script.getParameter({ name: 'custscript_cde_wms_po_folder' });
+       var prefs = SFTPUtil.getWmsPrefs();
+        var folderId = prefs.poOutFolderId;
+
+        if (!folderId) {
+        log.error('REDUCE - no output folder', { pref: 'custscript_wms_po_out_folder_id' });
+        // marquer queues en error etc.
+        return;
+        }
     }
 
     return {
