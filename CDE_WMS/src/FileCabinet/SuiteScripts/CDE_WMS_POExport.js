@@ -587,9 +587,11 @@ define([
 
         if (!folderId) {
         log.error('REDUCE - no output folder', { pref: 'custscript_wms_po_out_folder_id' });
-        // marquer queues en error etc.
+     
         return;
         }
+
+        return folderId;
     }
 
     return {
