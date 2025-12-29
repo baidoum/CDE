@@ -360,7 +360,7 @@ define([
                         LineNumber:              lineNumber,
                         ItemNumber:              itemCode,
                         OrderedQuantity:         lotQty,
-                        Comment:                 headerData.memo,
+                        Comment  :          headerData.memo,
                         VendorName:              headerData.VendorName,
                         UnitOfMeasure:           uom,
                         SoucheOrderERP:          '',

@@ -343,6 +343,8 @@ if (!res.success) {
           return '1';
         case 'IUOM_Inventory':
           return '1';
+        case 'IUOM_RetourClient':
+          return '1';
         case 'Contrat Date':
           return '0';
         case 'TolerancePoidsVariable':
