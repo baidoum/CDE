@@ -25,6 +25,8 @@ function (record, sftp, file, log, config, QueueUtil) {
             ownerCode: prefs.getValue('custscript_wms_owner_code'),
             inboundDirectory: prefs.getValue('custscript_wms_sftp_inbound_dir'),
             poOutFolderId: prefs.getValue('custscript_cde_wms_po_folder'),
+            soOutFolderId: prefs.getValue('custscript_cde_wms_so_folder'),
+            itemOutFolderId: prefs.getValue('custscript_cde_wms_item_folder'),
 
         };
 

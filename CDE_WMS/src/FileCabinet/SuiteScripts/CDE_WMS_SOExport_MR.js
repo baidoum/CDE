@@ -551,9 +551,18 @@ define([
     }
 
     function getOutputFolderId() {
-        var script = runtime.getCurrentScript();
-        return script.getParameter({ name: 'custscript_cde_wms_so_folder' });
+       var prefs = SFTPUtil.getWmsPrefs();
+        var folderId = prefs.soOutFolderId;
+
+        if (!folderId) {
+        log.error('REDUCE - no output folder', { pref: 'custscript_cde_wms_so_folder' });
+     
+        return;
+        }
+
+        return folderId;
     }
+
 
     return {
         getInputData: getInputData,

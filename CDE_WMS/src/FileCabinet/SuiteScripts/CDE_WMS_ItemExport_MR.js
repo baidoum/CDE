@@ -369,10 +369,19 @@ if (!res.success) {
   }
 
 
-  function getOutputFolderId() {
-    const script = runtime.getCurrentScript();
-    return script.getParameter({ name: 'custscript_cde_wms_item_folder' });
-  }
+
+    function getOutputFolderId() {
+       var prefs = SFTPUtil.getWmsPrefs();
+        var folderId = prefs.itemOutFolderId;
+
+        if (!folderId) {
+        log.error('REDUCE - no output folder', { pref: 'custscript_cde_wms_item_folder' });
+     
+        return;
+        }
+
+        return folderId;
+    }
 
   return {
     getInputData,
