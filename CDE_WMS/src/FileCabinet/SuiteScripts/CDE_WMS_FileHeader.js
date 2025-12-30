@@ -356,6 +356,7 @@ define([], function () {
      * @returns {string[]}
      */
     function getHeaderColumns(topic) {
+        
         if (!topic || !HEADERS_BY_TOPIC[topic]) {
             throw new Error('CDE_WMS_FileHeader.getHeaderColumns: topic inconnu ou non configuré : ' + topic);
         }

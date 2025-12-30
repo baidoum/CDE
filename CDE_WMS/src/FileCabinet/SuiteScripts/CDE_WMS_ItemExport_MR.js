@@ -128,9 +128,9 @@ define([
           UOM: itemRec.getValue({fieldId: 'stockunit'}),
           cost: itemRec.getValue({fieldId: 'cost'}),
           manufacturer: itemRec.getValue({fieldId: 'manufacturer'}),
-          
-          
-          // à enrichir plus tard avec tous les champs de mapping vers Pixi
+          chainedufroid: itemRec.getValue({fieldId: 'custitemcustitem_cde_chainedufroid'}),
+          variante: itemRec.getValue({fieldId: 'custitemcustitem_cde_conditionnement'}),
+
         };
 
         const line = buildItemExportLine(payload, headerCols, sep);
@@ -358,7 +358,9 @@ if (!res.success) {
         case 'PourcentContenu':
           return '0';
         case 'Libellé Unité de Mesure':
-          return  sanitizeValue(p.UOM || '');;
+          return  sanitizeValue(p.UOM || '');
+        case 'Variante':
+          return p.variante;
 
 
 

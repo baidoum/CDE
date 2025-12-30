@@ -10,6 +10,7 @@ define(['N/log','./CDE_WMS_QueueUtil'], (log, Queue) => {
   const F_READY = 'custitem_cde_sync_ready';
 
   function afterSubmit(context) {
+    
     try {
       const rec = context.newRecord;
       const ready = !!rec.getValue({ fieldId: F_READY });
