@@ -20,7 +20,7 @@ define(['N/ui/serverWidget', 'N/log'], function (serverWidget, log) {
             var rec  = context.newRecord;
 
             // Client Script (identique à ton script existant)
-            form.clientScriptFileId = 7290; // CDE_WMS_Inbound_CS.js
+            form.clientScriptFileId = 4141; // CDE_WMS_PrepProcess_CS.js
 
             var inboundId = rec.id;
             var topic     = rec.getValue({ fieldId: 'custrecord_wms_in_topic' });
