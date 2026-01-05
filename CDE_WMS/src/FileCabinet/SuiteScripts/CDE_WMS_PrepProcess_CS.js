@@ -5,6 +5,14 @@
 define([], function () {
 
     /**
+     * Entry point requis par NetSuite pour considérer le fichier comme un vrai Client Script.
+     * Même si on ne l'utilise pas, il doit exister.
+     */
+    function pageInit(context) {
+        // no-op
+    }
+
+    /**
      * Appelé lorsque l'utilisateur clique sur "Traiter la préparation WMS"
      * → On appelle le Suitelet de création des Item Fulfillments (SO)
      */
@@ -33,6 +41,7 @@ define([], function () {
     }
 
     return {
+        pageInit: pageInit,
         cdeWmsProcessPrep: cdeWmsProcessPrep,
         cdeWmsProcessReceipt: cdeWmsProcessReceipt
     };
