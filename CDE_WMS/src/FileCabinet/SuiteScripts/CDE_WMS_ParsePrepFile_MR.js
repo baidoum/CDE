@@ -59,7 +59,7 @@ define(['N/search', 'N/record', 'N/file', 'N/log'], function (search, record, fi
             ITEM_NUMBER:   4, 
             ORDERED_QTY:   15,  
             LOT_NUMBER:    8,
-            LINE_NUMBER_ERP: 39 
+            LINE_NUMBER_ERP: 38 
         }
     };
 
