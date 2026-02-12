@@ -16,6 +16,24 @@ define([
 ], (search, record, runtime, log, file, QueueUtil, FileHeader, SFTPUtil ) => {
 
 
+  function isSerializedItem(itemRec) {
+  // 1) Champ standard si disponible
+  try {
+    const v = itemRec.getValue({ fieldId: 'isserialitem' });
+    if (v === true || v === 'T' || v === 1) return true;
+    if (v === false || v === 'F' || v === 0) return false;
+  } catch (e) {
+    // Certains types d'articles n'ont pas le champ -> on ignore et on fallback
+  }
+
+  // 2) Fallback via le type de record (robuste si recordType est fiable)
+  const t = String(itemRec.type || '').toLowerCase();
+  // ex: "serializedinventoryitem", "serializedassemblyitem"
+  return t.indexOf('serialized') !== -1;
+}
+
+
+
   function getInputData() {
     log.audit('ItemExportMR.getInputData', 'Start');
 
@@ -123,13 +141,17 @@ define([
           itemid: itemRec.getValue({ fieldId: 'itemid' }),
           displayname: itemRec.getValue({ fieldId: 'displayname' }),
           islotitem: itemRec.getValue({ fieldId: 'islotitem' }),
+          usesSerial: isSerializedItem(itemRec),
           type: itemRec.type,
-          description4: itemRec.getValue({fieldId: 'purchasedescription'}),
+          description4: itemRec.getValue({fieldId: 'custitemcustitem_cde_nomaffichagen'}),
           UOM: itemRec.getValue({fieldId: 'stockunit'}),
           cost: itemRec.getValue({fieldId: 'cost'}),
           manufacturer: itemRec.getValue({fieldId: 'manufacturer'}),
           chainedufroid: itemRec.getValue({fieldId: 'custitemcustitem_cde_chainedufroid'}),
           variante: itemRec.getValue({fieldId: 'custitemcustitem_cde_conditionnement'}),
+          pays: itemRec.getValue({fieldId: 'custitemcustitem_cde_manufcountry'}),
+          
+
 
         };
 
@@ -259,6 +281,9 @@ if (!res.success) {
 
         case 'Description':
           return sanitizeValue(p.displayname);
+
+        case 'Description2':
+          return sanitizeValue(p.pays);
 
         case 'Description4': 
           return (p.description4)
