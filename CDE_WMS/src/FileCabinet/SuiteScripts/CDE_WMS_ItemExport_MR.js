@@ -148,7 +148,7 @@ define([
           cost: itemRec.getValue({fieldId: 'cost'}),
           manufacturer: itemRec.getValue({fieldId: 'manufacturer'}),
           chainedufroid: itemRec.getValue({fieldId: 'custitemcustitem_cde_chainedufroid'}),
-          variante: itemRec.getValue({fieldId: 'custitemcustitem_cde_conditionnement'}),
+          variante: itemRec.getValue({fieldId: 'custitem_cde_conditionnement'}),
           pays: itemRec.getValue({fieldId: 'custitemcustitem_cde_manufcountry'}),
           
 
