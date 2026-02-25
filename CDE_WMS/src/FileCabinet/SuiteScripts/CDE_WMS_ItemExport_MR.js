@@ -135,7 +135,7 @@ define([
       try {
         const recType = recordType || record.Type.INVENTORY_ITEM; // fallback si jamais
         const itemRec = record.load({ type: recType, id: itemId });
-
+        log.debug(itemRec.getValue({fieldId: 'custitem_cde_conditionnement'}));
         const payload = {
           id: itemId,
           itemid: itemRec.getValue({ fieldId: 'itemid' }),
@@ -149,7 +149,7 @@ define([
           manufacturer: itemRec.getValue({fieldId: 'manufacturer'}),
           chainedufroid: itemRec.getValue({fieldId: 'custitemcustitem_cde_chainedufroid'}),
           variante: itemRec.getValue({fieldId: 'custitem_cde_conditionnement'}),
-          pays: itemRec.getValue({fieldId: 'custitemcustitem_cde_manufcountry'}),
+          pays: itemRec.getValue({fieldId: 'custitemcustitem_cde_manufcountry'})
           
 
 

@@ -260,6 +260,12 @@ define([
             memo:    poRec.getValue({ fieldId: 'memo' }) || ''                  // commentaire
         };
 
+        var allowedItemTypes = {
+  InvtPart: true,
+  Assembly: true
+};
+
+
         for (var i = 0; i < lineCount; i++) {
             var itemId = poRec.getSublistValue({
                 sublistId: 'item',
@@ -284,6 +290,19 @@ define([
                 itemType: itemType,
                 quantity: qty
             });
+
+            log.debug('itemtype',itemType);
+
+
+
+                if (!allowedItemTypes[itemType]) {
+        log.debug('PO line skipped (non-inventory)', {
+            poId: poId,
+            line: i,
+            itemType: itemType
+        });
+        continue;
+    }
 
             if (!itemId) {
                 continue;
