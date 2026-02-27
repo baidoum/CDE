@@ -144,12 +144,13 @@ define([
           usesSerial: isSerializedItem(itemRec),
           type: itemRec.type,
           description4: itemRec.getValue({fieldId: 'custitemcustitem_cde_nomaffichagen'}),
+          description5: formatDateYYYYMMDD(itemRec.getValue({ fieldId: 'custitem_validiteofrre' })),
           UOM: itemRec.getValue({fieldId: 'stockunit'}),
           cost: itemRec.getValue({fieldId: 'cost'}),
           manufacturer: itemRec.getValue({fieldId: 'manufacturer'}),
           chainedufroid: itemRec.getValue({fieldId: 'custitemcustitem_cde_chainedufroid'}),
           variante: itemRec.getValue({fieldId: 'custitem_cde_conditionnement'}),
-          pays: itemRec.getValue({fieldId: 'custitemcustitem_cde_manufcountry'})
+          pays: itemRec.getText({fieldId: 'custitemcustitem_cde_manufcountry'})
           
 
 
@@ -286,7 +287,10 @@ if (!res.success) {
           return sanitizeValue(p.pays);
 
         case 'Description4': 
-          return (p.description4)
+          return (p.description4);
+
+        case 'Description5': 
+          return (p.description5);
 
         case 'UsesLot':
           return (p.islotitem === true || p.islotitem === 'T' || p.islotitem === 1) ? '1' : '0';
@@ -298,7 +302,7 @@ if (!res.success) {
           return '0';
 
         case 'UsesDLV':
-          return '1';
+          return '0';
 
         case 'UsesDateRec':
           return '0';
